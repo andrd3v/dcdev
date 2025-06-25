@@ -20,7 +20,7 @@ v4 = (NSXPCConnection *)objc_msgSend(
 При получении соедниения он вызвает DCClientHandler initWithConnection: в своем листенере DCXPCListener listener:shouldAcceptNewConnection:
 во первых этот метод вызывает 
 ```if ( -[DCClientHandler _isSupported](self, "_isSupported") ) ```
-значение этой переменной жестко закодирвоанно в DeviceIdentityIsSupported из приватного фреймворка
+значение этой переменной жестко закодирвоанно в ```DeviceIdentityIsSupported``` из приватного фреймворка
 ```
 __int64 DeviceIdentityIsSupported_1()
 {
@@ -30,10 +30,11 @@ __int64 DeviceIdentityIsSupported_1()
 
 *** предположу, что если дсдевайс недоступен на девайсе, то там будет другая сборка фреймворка и там будет закодирован 0 ***
 
-после проверки поддрежки вызывается DCClientHandler _generateAppIDFromCurrentConnection
+после проверки поддрежки вызывается ```DCClientHandler _generateAppIDFromCurrentConnection```
 этот метод получает
 
-```team_id_and_bundle = objc_claimAutoreleasedReturnValue(
+```
+team_id_and_bundle = objc_claimAutoreleasedReturnValue(
     -[DCClientHandler _stringValueForEntitlement:]
         (self, "_stringValueForEntitlement:",
          CFSTR("application-identifier")));
@@ -51,7 +52,8 @@ if (![team_id_and_bundle length]) {
 ```
 
 Если team_id валидный и не "0000000000", объединяет через точку, иначе использует только bundle_id
-```if (team_id && [team_id length] && ![team_id isEqualToString:@"0000000000"]) {
+```
+if (team_id && [team_id length] && ![team_id isEqualToString:@"0000000000"]) {
     appID = [NSString stringWithFormat:@"%@.%@", team_id, bundle_id];
 } else {
     appID = bundle_id;
