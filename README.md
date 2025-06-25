@@ -21,7 +21,8 @@ v4 = (NSXPCConnection *)objc_msgSend(
 во первых этот метод вызывает 
 ```if ( -[DCClientHandler _isSupported](self, "_isSupported") ) ```
 значение этой переменной жестко закодирвоанно в DeviceIdentityIsSupported из приватного фреймворка
-```__int64 DeviceIdentityIsSupported_1()
+```
+__int64 DeviceIdentityIsSupported_1()
 {
   return 1LL;
 }
