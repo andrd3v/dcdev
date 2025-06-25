@@ -17,7 +17,7 @@ v4 = (NSXPCConnection *)objc_msgSend(
 
 Перемещаемся в devicecheckd
 
-При получении соедниения он вызвает ```DCClientHandler initWithConnection:``` в своем листенере ```DCXPCListener listener:shouldAcceptNewConnection:```
+При получении соедниения он вызвает ```DCClientHandler initWithConnection:``` - > ```DCClientHandler fetchOpaqueBlobWithCompletion``` в своем листенере ```DCXPCListener listener:shouldAcceptNewConnection:```
 во первых этот метод вызывает 
 ```if ( -[DCClientHandler _isSupported](self, "_isSupported") ) ```
 значение этой переменной жестко закодирвоанно в ```DeviceIdentityIsSupported``` из приватного фреймворка
