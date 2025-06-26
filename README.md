@@ -240,7 +240,93 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
 
 вся это функция ассинхронная и раскидана по `колдам`
 вот ее восстановленный вариант
+```objc
+- (NSData *)_encryptData:(NSData *)rawChain
+        serverSyncedDate:(NSDate *)serverDate
+                    error:(NSError **)outError
+{
+    // 1. Проверяем входные данные
+    if (rawChain == nil) {
+        *outError = [NSError dc_errorWithCode:0];
+        return nil;
+    }
+
+    // 2. Извлекаем публичный ключ из self->_publicKey
+    NSData *pubKeyData = self->_publicKey;  // ожид. 65 байт
+    if (pubKeyData.length != 65) {
+        *outError = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror" code:0 userInfo:nil];
+        return nil;
+    }
+
+    // 3. Формируем CBOR-контекст:
+    //    { "chain": rawChain.bytes,
+    //      "date": serverDate.timeIntervalSince1970,
+    //      "appID": context.appID,
+    //      "entitlements": context.entitlements,
+    //      … }
+    NSMutableData *cborPayload = CBOREncode({
+        "raw_chain": rawChain,
+        "server_date": @(serverDate.timeIntervalSince1970),
+        "app_id": self->_context.appID, // вот тут хранится наш тим айди и бандл
+        "entitlements": self->_context.entitlementsDict // и тут лежат енты приложения
+    });
+
+    // 4. Генерируем ephemeral ключ (EC P-256)
+    ECKeyPair *ephemeral = ECCreateKeyPair(curve: P256);
+
+    // 5. Выполняем ECDH между ephemeral.private и pubKeyData
+    NSData *sharedSecret = ECDH(ephemeral.privateKey, pubKeyData);
+
+    // 6. Из sharedSecret и serverDate деривим симметричный ключ
+    NSData *symKey = HKDF(sharedSecret,
+                          salt: serverDate.timeIntervalSince1970,
+                          info: "DeviceCheck",
+                          length: 32);
+
+    // 7. Шифруем CBOR-пакет AES-GCM
+    NSData *iv         = RandomBytes(12);
+    (NSData *cipherText, NSData *tag) = AESGCM_Encrypt(symKey, iv, cborPayload);
+
+    // 8. Финальный формат (например, CBOR-массив):
+    //    [ ephemeral.publicKey || iv || tag || cipherText ]
+    NSMutableData *outBlob = CBOREncodeArray(@[
+        ephemeral.publicKeyData,
+        iv,
+        tag,
+        cipherText
+    ]);
+
+    return outBlob;
+}
+```
+
+В DCClientHandler, в случае успеха app_id != nil
+```
+objc_msgSend(init_DCDDeviceMetadata,
+             "generateEncryptedBlobWithCompletion:",
+             v4);
+...
+objc_release(init_DCDDeviceMetadata);
+```
+
+v4 здесь и есть блок, который XPC-демон вызовет, чтобы отправить ответ клиенту. Когда в DCDDeviceMetadata этот v4 вызовут (как показано в __57__…_block_invoke), данные улетают обратно в мой процесс.
 
 
 
 
+что же в итоге
+
+```
+App → DCDevice.generateToken
+   → XPC → DCClientHandler.fetchOpaqueBlob
+      → DCDDeviceMetadata.generateEncryptedBlob
+         → DCCryptoProxyImpl.fetchOpaqueBlob
+            → DCCertificateGenerator.generateEncryptedCertificateChain
+               → _generateCertificateChain…
+                  → __74__…block_invoke → _encryptData…
+                     → completion(rawChain, nil)
+               ← completion(encryptedBlob, nil)
+            ← innerBlock(rawChain, nil)
+         ← completionBlock(encryptedBlob, nil)
+      ← XPC → App receives NSData token
+```
