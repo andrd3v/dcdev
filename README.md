@@ -78,6 +78,40 @@ if (team_id && [team_id length] && ![team_id isEqualToString:@"0000000000"]) {
    // передаем наши классы в DeviceCheckInternal
 ```
 
+итак, вернемся к вызову `DCDDeviceMetadata generateEncryptedBlobWithCompletion:` в демоне(не в приваетфреймворке!)
+после инициализации паблик ключа в `DCDDeviceMetadata initWithContext:cryptoProxy:`
+вызывается из приват фреймворка```objc_msgSend(init_DCDDeviceMetadata, "generateEncryptedBlobWithCompletion:", v4);``` <- `в демоне!`
+
+`generateEncryptedBlobWithCompletion` инициирует асинхронную генерацию «зашифрованного блоба» (token), проксируя запрос к криптографическому слою (DCCryptoProxy) и передавая клиентский блок-обработчик.
+
+```
+- (void)generateEncryptedBlobWithCompletion:
+        (void (^)(NSData *encryptedBlob, NSError *error))completion
+{
+    void (^cb)(NSData*,NSError*) = [completion retain];
+    DCCryptoProxy *cryptoProxy = self->_cryptoProxy;
+    DCContext      *context     = self->_context;
+
+    //    __57__DCDDeviceMetadata_generateEncryptedBlobWithCompletion___block_invoke // <- !!!!!!!
+    void (^innerBlock)(NSData *rawChain, NSError *error) = ^(NSData *rawChain, NSError *error) {
+        if (rawChain) {
+            completion(rawChain, nil);
+        } else {
+            NSError *err = [NSError dc_errorWithCode:0];
+            completion(nil, err);
+            [err release];
+        }
+    };
+
+    [cryptoProxy fetchOpaqueBlobWithContext:context
+                                completion:innerBlock]; // DCCryptoProxyImpl
+
+    [cb release];
+}
+```
+
+
+
 `DCCryptoProxyImpl` → `DCCertificateGenerator`
 
 ```DCCryptoProxyImpl``` фактически лишь запускает подсистему логирования/сигнализации (через _DCLogSystem_0) и не содержит остальной логики прямо в этом месте. Весь «мозг» перенесён в блок
@@ -126,7 +160,7 @@ id __cdecl -[DCCertificateGenerator initWithContext:publicKey:](...)
 ```self->_publicKey``` – публичный ключ приложения
 ```self->_context``` – объект DCContext с параметрами сессии
 
-## Второй метод инициирует асинхронную генерацию «сырых» (нешифрованных) сертификатов, передавая внутреннему методу _generateCertificateChainWithCompletion: свой блок-обработчик.
+## а далее второй метод в вызове в метадате generateEncryptedBlobWithCompletion инициирует асинхронную генерацию «сырых» (нешифрованных) сертификатов, передавая внутреннему методу _generateCertificateChainWithCompletion: свой блок-обработчик.
 
 ```objc
 void __cdecl -[DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:](...)
@@ -148,7 +182,7 @@ void __cdecl -[DCCertificateGenerator generateEncryptedCertificateChainWithCompl
 ```
 
 
-далее 
+далее в `[DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:]` генериурется сертификат с помощью блок инвойса 
 
 ```objc
 void __fastcall __74__…block_invoke(int64_t block_ptr,
@@ -166,7 +200,7 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
         NSError *error = nil;
         NSData *encryptedBlob = [encryptor _encryptData:rawChain
                                      serverSyncedDate:serverDate
-                                                 error:&error];
+                                                 error:&error]; // что тут происходит описано ниже
 
         // 3. Вызываем исходный completion(encryptedBlob, error)
         completion(encryptedBlob, error);
@@ -188,5 +222,25 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
     }
 }
 ```
+
+
+как же получается блоб 
+`        NSData *encryptedBlob = [encryptor _encryptData:rawChain
+                                     serverSyncedDate:serverDate
+                                                 error:&error];  
+`
+
+Основной путь:
+Сериализация данных → `CBOR`
+Эфемерный `ECDH` → `shared secret`
+`HKDF` → симметричный ключ
+`AES-GCM` шифрование
+Сборка финального `blob-а`
+
+
+вся это функция ассинхронная и раскидана по `колдам`
+вот ее восстановленный вариант
+
+
 
 
