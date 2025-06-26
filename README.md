@@ -68,7 +68,7 @@ if (team_id && [team_id length] && ![team_id isEqualToString:@"0000000000"]) {
    ```objc
    [DCDDeviceMetadata initWithContext:cryptoProxy:…];
 
-
+  //я думал что тут можно хукнуть и атаковать , но так как это демон, то атаковать нельзя, также нельзя атаковать методы из интерналфреймворка и мы не можем создать свой демон чтобы подменить коннектион в DeviceCheck - мы можем только полностью эмулировать его работу и все
    DCContext_class = objc_alloc_init((Class)&OBJC_CLASS___DCContext); // тут нельзя хукнуть методы так как они из фреймворка интернал 
    objc_msgSend(DCContext_class, "setClientAppID:", app_id); // выставляем в классе наш "<TeamID>.<BundleIdentifier>"
    DCDDeviceMetadata = objc_alloc((Class)&OBJC_CLASS___DCDDeviceMetadata);
