@@ -62,4 +62,41 @@ if (team_id && [team_id length] && ![team_id isEqualToString:@"0000000000"]) {
 вернет строку которая получилась в итоге, если она не пустая 
 ```return [appID length] ? appID : nil;```
 
+**📅 26 июня 2025**
+
+В `DCClientHandler fetchOpaqueBlobWithCompletion` вызывается
+   ```objc
+   [DCDDeviceMetadata initWithContext:cryptoProxy:…];
+
+
+   DCContext_class = objc_alloc_init((Class)&OBJC_CLASS___DCContext); // тут нельзя хукнуть методы так как они из фреймворка интернал 
+   objc_msgSend(DCContext_class, "setClientAppID:", app_id); // выставляем в классе наш "<TeamID>.<BundleIdentifier>"
+   DCDDeviceMetadata = objc_alloc((Class)&OBJC_CLASS___DCDDeviceMetadata);
+   DCCryptoProxyImpl = objc_alloc_init((Class)&OBJC_CLASS___DCCryptoProxyImpl);
+   // создаем два вспомогательных класса
+   v11 = objc_msgSend(DCDDeviceMetadata, "initWithContext:cryptoProxy:", DCContext_class, DCCryptoProxyImpl);
+   // передаем наши классы в DeviceCheckInternal
+```
+
+`DCCryptoProxyImpl` → `DCCertificateGenerator`
+
+```DCCryptoProxyImpl``` фактически лишь запускает подсистему логирования/сигнализации (через _DCLogSystem_0) и не содержит остальной логики прямо в этом месте. Весь «мозг» перенесён в блок
+
+```objc
+void __noreturn __59__DCCryptoProxyImpl_fetchOpaqueBlobWithContext_completion___block_invoke(
+        int64_t a1, void *publicKey)
+{
+    // 1) Захват publicKey
+    DCCertificateGenerator *gen = [[DCCertificateGenerator alloc]
+        initWithContext:(DCContext *)*(uint64_t *)(a1 + 32)
+               publicKey:(id)objc_retain(publicKey)];
+
+    // 2) Генерация цепочки и шифрование
+    [gen generateEncryptedCertificateChainWithCompletion:
+        (void (^)(NSData *blob, NSError *error))*(uint64_t *)(a1 + 40)];
+
+    objc_release(gen);
+}
+```
+
 
