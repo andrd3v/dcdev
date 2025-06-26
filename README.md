@@ -316,17 +316,29 @@ v4 здесь и есть блок, который XPC-демон вызовет
 
 что же в итоге
 
-```
-App → DCDevice.generateToken
-   → XPC → DCClientHandler.fetchOpaqueBlob
-      → DCDDeviceMetadata.generateEncryptedBlob
-         → DCCryptoProxyImpl.fetchOpaqueBlob
-            → DCCertificateGenerator.generateEncryptedCertificateChain
-               → _generateCertificateChain…
-                  → __74__…block_invoke → _encryptData…
-                     → completion(rawChain, nil)
-               ← completion(encryptedBlob, nil)
-            ← innerBlock(rawChain, nil)
-         ← completionBlock(encryptedBlob, nil)
-      ← XPC → App receives NSData token
-```
+# Цепочка генерации токена DeviceCheck
+
+1. **App → `DCDevice.generateToken`**  
+   Клиентский код инициирует запрос на генерацию токена.
+
+2. **XPC → `DCClientHandler.fetchOpaqueBlob`**  
+   `DCDeviceMetadataDaemonConnection` пересылает вызов демону `devicecheckd`.
+
+3. **`DCDDeviceMetadata.generateEncryptedBlob`**  
+   Формирует внутренний блок и проксирует в криптослой.
+
+4. **`DCCryptoProxyImpl.fetchOpaqueBlob`**  
+   Запускает логирование и передает контекст и публичный ключ в генератор сертификатов.
+
+5. **`DCCertificateGenerator.generateEncryptedCertificateChain`**  
+   Асинхронно собирает «сырую» цепочку сертификатов.
+
+6. **`_generateCertificateChain…` → `__74__…block_invoke` → `_encryptData`**  
+   Сериализует данные (CBOR), выполняет ECDH+HKDF, шифрует AES-GCM и возвращает зашифрованный blob.
+
+7. **`completion(rawChain, nil)` → `innerBlock(rawChain, nil)` → `completionBlock(encryptedBlob, nil)`**  
+   Внутренние блоки прокидывают результат до исходного XPC-блока.
+
+8. **XPC → App receives `NSData` token**  
+   Демон отправляет зашифрованный blob обратно в приложение по XPC.
+
