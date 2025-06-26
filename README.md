@@ -247,7 +247,6 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
         serverSyncedDate:(NSDate *)serverDate
                     error:(NSError **)error
 {
-    // Захватываем владение параметрами
     NSData   *plainData      = [data retain];
     NSDate   *syncedDate     = [serverDate retain];
     NSData   *clientAppIDRaw = [[[self clientAppID] dataUsingEncoding:NSUTF8StringEncoding] retain];
@@ -262,16 +261,14 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
     // Получаем байты и длины
     const void *plainBytes = [plainData bytes];
     size_t      plainLen   = [plainData length];
-
     const void *appIDBytes = [clientAppIDRaw bytes];
     size_t      appIDLen   = [clientAppIDRaw length];
 
-    // --- ECDH: получаем и печатаем публичный ключ ---
 
-    // Буфер для публичного ключа (длина – 65 байт)
+    // --- ECDH: получаем и печатаем публичный ключ ---
+    // Буфер для публичного ключа (длина – 65 байт) (ВАЖНО: тм ам есть проврека на длинну ключа, что он 65 - я опустил ее тут)
     uint8_t pubKeyBuf[65] = {0};
     aks_ref_key_get_public_key(self->_refKey, pubKeyBuf);
-    // Печатаем его в hex (для отладки)
     printf("%-25.25s = ", "random_pubkey");
     for (int i = 0; i < 65; i++) {
         printf("%02x", pubKeyBuf[i]);
@@ -414,21 +411,19 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
     NSData *result = [[[NSData alloc] initWithBytes:envelope
                                              length:envelopeTotalLen] autorelease];
 
-    // очищаем временные буферы
     free(envelope);
     free(payload);
 
-    // лог шифрованного бинарника
     _DCLogSystem();
 
 cleanup:
-    // освобождаем всё
     if (sharedSecret)      aks_ref_key_free(&sharedSecret);
     [plainData release];
     [clientAppIDRaw release];
     [syncedDate release];
 
-    if (localError) {
+    if (localError)
+    {
         if (error) *error = localError;
         return nil;
     }
