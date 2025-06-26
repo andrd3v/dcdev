@@ -239,65 +239,204 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
 
 
 вся это функция ассинхронная и раскидана по `колдам`
-вот ее восстановленный вариант
+вот ее восстановленный вариант 
 ```objc
-- (NSData *)_encryptData:(NSData *)rawChain
+
+
+- (NSData *)_encryptData:(NSData *)data
         serverSyncedDate:(NSDate *)serverDate
-                    error:(NSError **)outError
+                    error:(NSError **)error
 {
-    // 1. Проверяем входные данные
-    if (rawChain == nil) {
-        *outError = [NSError dc_errorWithCode:0];
-        return nil;
+    // Захватываем владение параметрами
+    NSData   *plainData      = [data retain];
+    NSDate   *syncedDate     = [serverDate retain];
+    NSData   *clientAppIDRaw = [[[self clientAppID] dataUsingEncoding:NSUTF8StringEncoding] retain];
+    NSError  *localError     = nil;
+
+    // Логируем начало шифрования
+    os_log_t logHandle = [OSLog subsystem:@"com.apple.devicecheck" category:@"DCCertificateGenerator"];
+    if (os_log_type_enabled(logHandle, OS_LOG_TYPE_DEFAULT)) {
+        os_log(logHandle, "Encrypting data...");
     }
 
-    // 2. Извлекаем публичный ключ из self->_publicKey
-    NSData *pubKeyData = self->_publicKey;  // ожид. 65 байт
-    if (pubKeyData.length != 65) {
-        *outError = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror" code:0 userInfo:nil];
-        return nil;
+    // Получаем байты и длины
+    const void *plainBytes = [plainData bytes];
+    size_t      plainLen   = [plainData length];
+
+    const void *appIDBytes = [clientAppIDRaw bytes];
+    size_t      appIDLen   = [clientAppIDRaw length];
+
+    // --- ECDH: получаем и печатаем публичный ключ ---
+
+    // Буфер для публичного ключа (длина – 65 байт)
+    uint8_t pubKeyBuf[65] = {0};
+    aks_ref_key_get_public_key(self->_refKey, pubKeyBuf);
+    // Печатаем его в hex (для отладки)
+    printf("%-25.25s = ", "random_pubkey");
+    for (int i = 0; i < 65; i++) {
+        printf("%02x", pubKeyBuf[i]);
+    }
+    putchar('\n');
+
+    // --- Вычисляем общий секрет ECDH ---
+    uint8_t  *sharedSecret = NULL;
+    size_t    sharedLen    = 0;
+    int ecdhOK = aks_ref_key_compute_key(
+        pubKeyBuf,              // remote pubkey
+        0, 0,
+        (uint8_t *)pubKeyBuf,    // локальный приватный ключ храним внутри refKey
+        &sharedSecret, &sharedLen
+    );
+    if (!ecdhOK) {
+        _DCLogSystem();
+        localError = [NSError errorWithDomain:@"DCCertificateGenerator"
+                                         code:-1
+                                     userInfo:@{NSLocalizedDescriptionKey: @"ECDH failed"}];
+        goto cleanup;
     }
 
-    // 3. Формируем CBOR-контекст:
-    //    { "chain": rawChain.bytes,
-    //      "date": serverDate.timeIntervalSince1970,
-    //      "appID": context.appID,
-    //      "entitlements": context.entitlements,
-    //      … }
-    NSMutableData *cborPayload = CBOREncode({
-        "raw_chain": rawChain,
-        "server_date": @(serverDate.timeIntervalSince1970),
-        "app_id": self->_context.appID, // вот тут хранится наш тим айди и бандл
-        "entitlements": self->_context.entitlementsDict // и тут лежат енты приложения
-    });
+    // Печатаем общий секрет
+    printf("%-25.25s = ", "ECDH shared key");
+    for (size_t i = 2; i < sharedLen; i++) { // первые 2 байта – заголовок
+        printf("%02x", sharedSecret[i]);
+    }
+    putchar('\n');
 
-    // 4. Генерируем ephemeral ключ (EC P-256)
-    ECKeyPair *ephemeral = ECCreateKeyPair(curve: P256);
+    // --- HKDF (SHA256) ---
+    uint8_t derivedKey[32] = {0};
+    if (cchkdf(ccsha256_ltc_di_ptr,
+               sharedLen - 2,
+               sharedSecret + 2,
+               0, 0, 0, 0,
+               sizeof(derivedKey),
+               derivedKey) != 0)
+    {
+        _DCLogSystem();
+        localError = [NSError errorWithDomain:@"DCCertificateGenerator"
+                                         code:-2
+                                     userInfo:@{NSLocalizedDescriptionKey: @"HKDF failed"}];
+        goto cleanup;
+    }
 
-    // 5. Выполняем ECDH между ephemeral.private и pubKeyData
-    NSData *sharedSecret = ECDH(ephemeral.privateKey, pubKeyData);
+    // Печатаем derivedKey
+    printf("%-25.25s = ", "HKDF derived key");
+    for (int i = 0; i < 32; i++) {
+        printf("%02x", derivedKey[i]);
+    }
+    putchar('\n');
 
-    // 6. Из sharedSecret и serverDate деривим симметричный ключ
-    NSData *symKey = HKDF(sharedSecret,
-                          salt: serverDate.timeIntervalSince1970,
-                          info: "DeviceCheck",
-                          length: 32);
+    // Извлекаем IV (12 байт) – вторую половину HKDF
+    uint8_t derivedIV[12] = {0};
+    memcpy(derivedIV, derivedKey + 32, sizeof(derivedIV)); // в оригинале v13[128] байтов, здесь берём первые 12
 
-    // 7. Шифруем CBOR-пакет AES-GCM
-    NSData *iv         = RandomBytes(12);
-    (NSData *cipherText, NSData *tag) = AESGCM_Encrypt(symKey, iv, cborPayload);
+    printf("%-25.25s = ", "HKDF derived iv");
+    for (int i = 0; i < 12; i++) {
+        printf("%02x", derivedIV[i]);
+    }
+    putchar('\n');
 
-    // 8. Финальный формат (например, CBOR-массив):
-    //    [ ephemeral.publicKey || iv || tag || cipherText ]
-    NSMutableData *outBlob = CBOREncodeArray(@[
-        ephemeral.publicKeyData,
-        iv,
-        tag,
-        cipherText
-    ]);
+    // --- Подготавливаем выходной буфер ---
+    // общая длина «зашивки» (appID + plain + 81)
+    uint32_t envelopePayloadLen = (uint32_t)(appIDLen + plainLen + 81);
 
-    return outBlob;
+    // allocate header+payload
+    size_t envelopeTotalLen = envelopePayloadLen + 154; // 235 ≈ 154 + 81
+    uint8_t *envelope = calloc(1, envelopeTotalLen);
+    if (!envelope) {
+        localError = [NSError errorWithDomain:@"DCCertificateGenerator"
+                                         code:-3
+                                     userInfo:@{NSLocalizedDescriptionKey: @"calloc failed"}];
+        goto cleanup;
+    }
+
+    // version
+    envelope[0] = 2;
+
+    // копируем публичный ключ (начиная с байта 5)
+    memcpy(envelope + 5, pubKeyBuf, sizeof(pubKeyBuf));
+
+    // устанавливаем в заголовке длину payload
+    *(uint32_t *)(envelope + 150) = envelopePayloadLen;
+
+    // собственно payload
+    uint8_t *payload = calloc(1, envelopePayloadLen);
+    if (!payload) {
+        free(envelope);
+        localError = [NSError errorWithDomain:@"DCCertificateGenerator"
+                                         code:-4
+                                     userInfo:@{NSLocalizedDescriptionKey: @"calloc payload failed"}];
+        goto cleanup;
+    }
+
+    // вставляем timestamp
+    NSTimeInterval ts = [syncedDate timeIntervalSince1970];
+    *(uint64_t *)(payload + 65) = (uint64_t)ts;
+
+    // копируем appID
+    *(uint32_t *)(payload + 73) = (uint32_t)appIDLen;
+    memcpy(payload + 81, appIDBytes, appIDLen);
+
+    // копируем plainData
+    *(uint32_t *)(payload + 77) = (uint32_t)plainLen;
+    memcpy(payload + 81 + appIDLen, plainBytes, plainLen);
+
+    // --- AES-GCM шифрование всего payload ---
+    if (ccgcm_one_shot(sharedSecret,
+                       sizeof(derivedKey),
+                       derivedKey,
+                       sizeof(derivedIV),
+                       derivedIV,
+                       0, 0,
+                       envelopePayloadLen,
+                       payload,
+                       16,
+                       envelope + 4) != 0)
+    {
+        _DCLogSystem();
+        free(envelope);
+        free(payload);
+        localError = [NSError errorWithDomain:@"DCCertificateGenerator"
+                                         code:-5
+                                     userInfo:@{NSLocalizedDescriptionKey: @"AES-GCM failed"}];
+        goto cleanup;
+    }
+
+    // Печать тега
+    printf("%-25.25s = ", "tag");
+    for (int i = 4; i < 20; i++) {
+        printf("%02x", envelope[i]);
+    }
+    putchar('\n');
+
+    fprintf(stderr, "encrypted_data_len: %u\n", envelopePayloadLen);
+
+    // Готовим NSData для возврата
+    NSData *result = [[[NSData alloc] initWithBytes:envelope
+                                             length:envelopeTotalLen] autorelease];
+
+    // очищаем временные буферы
+    free(envelope);
+    free(payload);
+
+    // лог шифрованного бинарника
+    _DCLogSystem();
+
+cleanup:
+    // освобождаем всё
+    if (sharedSecret)      aks_ref_key_free(&sharedSecret);
+    [plainData release];
+    [clientAppIDRaw release];
+    [syncedDate release];
+
+    if (localError) {
+        if (error) *error = localError;
+        return nil;
+    }
+    return result;
 }
+
+
+
 ```
 
 В DCClientHandler, в случае успеха app_id != nil
