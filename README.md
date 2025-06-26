@@ -100,3 +100,93 @@ void __noreturn __59__DCCryptoProxyImpl_fetchOpaqueBlobWithContext_completion___
 ```
 
 
+## Методы `DCCertificateGenerator`
+
+```objc
+- (instancetype)initWithContext:(DCContext *)context
+                     publicKey:(id)publicKey;
+- (void)generateEncryptedCertificateChainWithCompletion:
+         (void (^)(NSData *encryptedBlob, NSError *error))completion;
+```
+
+## Первый создает паблик ключ
+```
+id __cdecl -[DCCertificateGenerator initWithContext:publicKey:](...)
+{
+    // 1. Ретейним переданные параметры
+    _publicKey = [publicKey retain];
+    _context   = [context retain];
+    // 2. Вызываем базовый init
+    self = [super init];
+    return self;
+}
+```
+
+Сохраняет в инстанс поля:
+```self->_publicKey``` – публичный ключ приложения
+```self->_context``` – объект DCContext с параметрами сессии
+
+## Второй метод инициирует асинхронную генерацию «сырых» (нешифрованных) сертификатов, передавая внутреннему методу _generateCertificateChainWithCompletion: свой блок-обработчик.
+
+```objc
+void __cdecl -[DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:](...)
+{
+    // 1. Ретейним callback-блок
+    id completion = [a3 retain];
+
+    // 2. Создаём стэк-блок __74__…_block_invoke
+    void (^block)(NSData *rawChain, NSDate *serverDate) = ^(NSData *rawChain, NSDate *serverDate) {
+        // этот код описан ниже
+    };
+
+    // 3. Передаём блок в приватный метод генерации сырой цепочки
+    [self _generateCertificateChainWithCompletion:block];
+
+    // 4. Освобождаем блок
+    [completion release];
+}
+```
+
+
+далее 
+
+```objc
+void __fastcall __74__…block_invoke(int64_t block_ptr,
+                                     int64_t rawChain,      // a2
+                                     int64_t serverDate)     // a3
+{
+    if (rawChain) {
+        // 1. Получаем self (зашифровщик) из 
+        void *encryptor = *(void **)(block_ptr + 32);
+
+        // 2. Вызываем приватный метод шифрования:
+        //    - rawChain        : NSData *
+        //    - serverDate      : NSDate *
+        //    - &errorPointer   : NSError **
+        NSError *error = nil;
+        NSData *encryptedBlob = [encryptor _encryptData:rawChain
+                                     serverSyncedDate:serverDate
+                                                 error:&error];
+
+        // 3. Вызываем исходный completion(encryptedBlob, error)
+        completion(encryptedBlob, error);
+
+        // 4. Освобождаем временные объекты
+        [encryptedBlob release];
+        [error release];
+    } else {
+        // 1. Если сырой chain отсутствует — формируем ошибку
+        NSError *error = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror"
+                                             code:0
+                                         userInfo:nil];
+
+        // 2. Вызываем completion(nil, error)
+        completion(nil, error);
+
+        // 3. Освобождаем ошибку
+        [error release];
+    }
+}
+```
+
+
