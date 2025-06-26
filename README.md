@@ -252,7 +252,6 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
     NSData   *clientAppIDRaw = [[[self clientAppID] dataUsingEncoding:NSUTF8StringEncoding] retain];
     NSError  *localError     = nil;
 
-    // Логируем начало шифрования
     os_log_t logHandle = [OSLog subsystem:@"com.apple.devicecheck" category:@"DCCertificateGenerator"];
     if (os_log_type_enabled(logHandle, OS_LOG_TYPE_DEFAULT)) {
         os_log(logHandle, "Encrypting data...");
@@ -292,7 +291,6 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
         goto cleanup;
     }
 
-    // Печатаем общий секрет
     printf("%-25.25s = ", "ECDH shared key");
     for (size_t i = 2; i < sharedLen; i++) { // первые 2 байта – заголовок
         printf("%02x", sharedSecret[i]);
@@ -315,7 +313,6 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
         goto cleanup;
     }
 
-    // Печатаем derivedKey
     printf("%-25.25s = ", "HKDF derived key");
     for (int i = 0; i < 32; i++) {
         printf("%02x", derivedKey[i]);
@@ -332,7 +329,6 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
     }
     putchar('\n');
 
-    // --- Подготавливаем выходной буфер ---
     // общая длина «зашивки» (appID + plain + 81)
     uint32_t envelopePayloadLen = (uint32_t)(appIDLen + plainLen + 81);
 
@@ -346,16 +342,11 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
         goto cleanup;
     }
 
-    // version
     envelope[0] = 2;
 
-    // копируем публичный ключ (начиная с байта 5)
     memcpy(envelope + 5, pubKeyBuf, sizeof(pubKeyBuf));
-
-    // устанавливаем в заголовке длину payload
     *(uint32_t *)(envelope + 150) = envelopePayloadLen;
 
-    // собственно payload
     uint8_t *payload = calloc(1, envelopePayloadLen);
     if (!payload) {
         free(envelope);
@@ -365,15 +356,12 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
         goto cleanup;
     }
 
-    // вставляем timestamp
     NSTimeInterval ts = [syncedDate timeIntervalSince1970];
     *(uint64_t *)(payload + 65) = (uint64_t)ts;
 
-    // копируем appID
     *(uint32_t *)(payload + 73) = (uint32_t)appIDLen;
     memcpy(payload + 81, appIDBytes, appIDLen);
 
-    // копируем plainData
     *(uint32_t *)(payload + 77) = (uint32_t)plainLen;
     memcpy(payload + 81 + appIDLen, plainBytes, plainLen);
 
@@ -398,7 +386,6 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
         goto cleanup;
     }
 
-    // Печать тега
     printf("%-25.25s = ", "tag");
     for (int i = 4; i < 20; i++) {
         printf("%02x", envelope[i]);
@@ -407,7 +394,7 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
 
     fprintf(stderr, "encrypted_data_len: %u\n", envelopePayloadLen);
 
-    // Готовим NSData для возврата
+    // NSData для возврата
     NSData *result = [[[NSData alloc] initWithBytes:envelope
                                              length:envelopeTotalLen] autorelease];
 
