@@ -240,6 +240,7 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
 
 вся это функция ассинхронная и раскидана по `колдам`
 вот ее восстановленный вариант 
+многое тут псевдокод чтобы сохранить логику, но вызовы там устроенны чуть по другому(например то же получение тим айди и бандл айди)
 ```objc
 
 
@@ -258,6 +259,7 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
     }
 
     // Получаем байты и длины
+ 
     const void *plainBytes = [plainData bytes];
     size_t      plainLen   = [plainData length];
     const void *appIDBytes = [clientAppIDRaw bytes];
