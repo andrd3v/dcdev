@@ -384,7 +384,7 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
         free(payload);
         localError = [NSError errorWithDomain:@"DCCertificateGenerator"
                                          code:-5
-                                     userInfo:@{NSLocalizedDescriptionKey: @"AES-GCM failed"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to perform AES-GSM encryption wi"}];
         goto cleanup;
     }
 
