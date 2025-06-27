@@ -289,7 +289,7 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
         _DCLogSystem();
         localError = [NSError errorWithDomain:@"DCCertificateGenerator"
                                          code:-1
-                                     userInfo:@{NSLocalizedDescriptionKey: @"ECDH failed"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to perform ECDH with server pubk"}];
         goto cleanup;
     }
 
@@ -311,7 +311,7 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
         _DCLogSystem();
         localError = [NSError errorWithDomain:@"DCCertificateGenerator"
                                          code:-2
-                                     userInfo:@{NSLocalizedDescriptionKey: @"HKDF failed"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to perform HKDF with shared key"}];
         goto cleanup;
     }
 
