@@ -258,8 +258,8 @@ void __fastcall __74__…block_invoke(int64_t block_ptr,
         os_log(logHandle, "Encrypting data...");
     }
 
-    // Получаем байты и длины
- 
+    //  v27 = (void *)objc_claimAutoreleasedReturnValue_5(objc_msgSend(*(id *)(v25 + 16), "clientAppID"));
+    //  v28 = (void *)objc_claimAutoreleasedReturnValue_5(objc_msgSend(v27, "dataUsingEncoding:", 4LL));   
     const void *plainBytes = [plainData bytes];
     size_t      plainLen   = [plainData length];
     const void *appIDBytes = [clientAppIDRaw bytes];
