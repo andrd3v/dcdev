@@ -457,7 +457,7 @@ unsigned int __cdecl +[DCCryptoUtilities generateTTL](id a1, SEL a2)
 
 
 далее в __66__DCCertificateGenerator__generateCertificateChainWithCompletion___block_invoke
-```
+```objc
 void (^generateCertificateChainBlock)(NSArray *) = ^(NSArray *certificates) 
 {
     os_log_t logger = os_log_create("com.apple.devicecheck", "DCCertificateGenerator");
@@ -559,7 +559,7 @@ void (^generateCertificateChainBlock)(NSArray *) = ^(NSArray *certificates)
 
 далее вызов DeviceIdentityIssueClientCertificateWithCompletion_0(0LL, arc_r, v7);
 с нашими arc4random_uniform_0 и __66__DCCertificateGenerator__generateCertificateChainWithCompletion___block_invoke(это v7)
-```
+```objc
 void DeviceIdentityIssueClientCertificateWithCompletion_0(
     dispatch_queue_t queue,
     id identityOptions,
@@ -608,7 +608,7 @@ void DeviceIdentityIssueClientCertificateWithCompletion_0(
 это все вовзращается в [DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:] и далее
 
 В DCClientHandler, в случае успеха app_id != nil
-```
+```objc
 objc_msgSend(init_DCDDeviceMetadata,
              "generateEncryptedBlobWithCompletion:",
              v4);
