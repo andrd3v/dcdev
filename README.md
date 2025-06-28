@@ -160,7 +160,7 @@ id __cdecl -[DCCertificateGenerator initWithContext:publicKey:](...)
 ```self->_publicKey``` – публичный ключ приложения
 ```self->_context``` – объект DCContext с параметрами сессии
 
-## а далее второй метод в вызове в метадате generateEncryptedBlobWithCompletion инициирует асинхронную генерацию «сырых» (нешифрованных) сертификатов, передавая внутреннему методу _generateCertificateChainWithCompletion: свой блок-обработчик.
+## а далее второй метод в вызове в метадате generateEncryptedBlobWithCompletion инициирует асинхронную генерацию «сырых» (нешифрованных) сертификатов, передавая внутреннему методу _generateCertificateChainWithCompletion: свой блок-обработчик [1].
 
 ```objc
 void __cdecl -[DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:](...)
@@ -423,6 +423,190 @@ cleanup:
 
 ```
 
+далее в [1] после блок инвойса с __74__DCCertificateGenerator_generateEncryptedCertificateChainWithCompletion___block_invoke вызывается [DCCertificateGenerator _generateCertificateChainWithCompletion:]
+```objc
+void __cdecl -[DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:](
+        DCCertificateGenerator *self,
+        SEL a2,
+        id a3)
+{
+  id v3; // x20
+  _QWORD v4[4]; // [xsp+0h] [xbp-40h] BYREF
+  DCCertificateGenerator *v5; // [xsp+20h] [xbp-20h]
+  id v6; // [xsp+28h] [xbp-18h]
+
+  v4[0] = _NSConcreteStackBlock_ptr;
+  v4[1] = 3221225472LL;
+  v4[2] = __74__DCCertificateGenerator_generateEncryptedCertificateChainWithCompletion___block_invoke;
+  v4[3] = &unk_20A9B2860;
+  v5 = self;
+  v6 = objc_retain(a3);
+  v3 = objc_retain(v6);
+  -[DCCertificateGenerator _generateCertificateChainWithCompletion:](v5, "_generateCertificateChainWithCompletion:", v4); // <------ !!!!!!
+  objc_release(v6);
+  objc_release(v3);
+}
+```
+в этом методе вызывается [DCCryptoUtilities identityCertificateOptions] -> [DCCryptoUtilities generateTTL] ->
+```objc
+unsigned int __cdecl +[DCCryptoUtilities generateTTL](id a1, SEL a2)
+{
+  return arc4random_uniform_0(0x40561u) + 262080;
+}
+```
+
+
+далее в __66__DCCertificateGenerator__generateCertificateChainWithCompletion___block_invoke
+```
+void (^generateCertificateChainBlock)(NSArray *) = ^(NSArray *certificates) 
+{
+    os_log_t logger = os_log_create("com.apple.devicecheck", "DCCertificateGenerator");
+    if (os_log_type_enabled(logger, OS_LOG_TYPE_INFO)) {
+        os_log_info(logger, "Certificate issued, processing..");
+    }
+
+    NSDate *currentDate = [NSDate date];
+
+    if (!certificates || certificates.count != 2) {
+        NSDictionary *userInfo = @{
+            NSLocalizedDescriptionKey: @"Invalid inputs."
+        };
+        NSError *error = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror"
+                                             code:0
+                                         userInfo:userInfo];
+        
+        if (os_log_type_enabled(logger, OS_LOG_TYPE_ERROR)) {
+            os_log_error(logger, "Invalid certificate chain: %{public}@", error);
+        }
+        
+        completionBlock(nil, nil, error);
+        return;
+    }
+
+    NSMutableData *certificateChainData = [NSMutableData data];
+    NSError *processingError = nil;
+
+    for (NSUInteger i = 0; i < certificates.count; i++) {
+        SecCertificateRef certificate = (__bridge SecCertificateRef)certificates[i];
+        NSData *derData = (__bridge_transfer NSData *)SecCertificateCopyData(certificate);
+        
+        if (!derData) {
+            NSDictionary *userInfo = @{
+                NSLocalizedDescriptionKey: @"Failed to convert certificate."
+            };
+            processingError = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror"
+                                                  code:0
+                                              userInfo:userInfo];
+            break;
+        }
+
+        NSString *pemHeader = @"-----BEGIN CERTIFICATE-----\n";
+        NSString *pemFooter = @"\n-----END CERTIFICATE-----";
+        
+        NSData *base64Data = [derData base64EncodedDataWithOptions:NSDataBase64Encoding64CharacterLineLength];
+        NSString *base64String = [[NSString alloc] initWithData:base64Data encoding:NSUTF8StringEncoding];
+        
+        if (!base64String) {
+            NSDictionary *userInfo = @{
+                NSLocalizedDescriptionKey: @"Base64 encoding failed."
+            };
+            processingError = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror"
+                                                  code:0
+                                              userInfo:userInfo];
+            break;
+        }
+
+        NSString *pemEntry = [NSString stringWithFormat:@"%@%@%@", pemHeader, base64String, pemFooter];
+        NSData *pemData = [pemEntry dataUsingEncoding:NSUTF8StringEncoding];
+        
+        if (i > 0) {
+            [certificateChainData appendData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        }
+        [certificateChainData appendData:pemData];
+    }
+
+    NSDate *validityDate = currentDate;
+    if (certificates.count >= 3) {
+        id potentialDate = certificates[2];
+        if ([potentialDate isKindOfClass:[NSDate class]]) {
+            validityDate = potentialDate;
+            if (os_log_type_enabled(logger, OS_LOG_TYPE_DEBUG)) {
+                os_log_debug(logger, "Using synced timestamp");
+            }
+        } else {
+            NSDictionary *userInfo = @{
+                NSLocalizedDescriptionKey: @"Expected date field, failing..."
+            };
+            processingError = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror"
+                                                  code:0
+                                              userInfo:userInfo];
+        }
+    }
+
+    if (processingError) {
+        if (os_log_type_enabled(logger, OS_LOG_TYPE_ERROR)) {
+            os_log_error(logger, "Certificate processing failed: %{public}@", processingError);
+        }
+        completionBlock(nil, nil, processingError);
+    } else {
+        if (os_log_type_enabled(logger, OS_LOG_TYPE_INFO)) {
+            os_log_info(logger, "Certificate processed successfully. Size: %lu", (unsigned long)certificateChainData.length);
+        }
+        completionBlock(certificateChainData, validityDate, nil);
+    }
+};
+```
+
+далее вызов DeviceIdentityIssueClientCertificateWithCompletion_0(0LL, arc_r, v7);
+с нашими arc4random_uniform_0 и __66__DCCertificateGenerator__generateCertificateChainWithCompletion___block_invoke(это v7)
+```
+void DeviceIdentityIssueClientCertificateWithCompletion_0(
+    dispatch_queue_t queue,
+    id identityOptions,
+    DeviceIdentityCompletionBlock completionBlock)
+{
+    if (queue) dispatch_retain(queue);
+    id opts = [identityOptions retain];
+    DeviceIdentityCompletionBlock blk = [completionBlock copy];
+
+    BOOL supported = isSupportedDeviceIdentityClient(NULL);
+
+    if (supported) {
+        dispatch_queue_t serialQ = copyDeviceIdentitySerialQueue();
+        dispatch_async(serialQ, ^{
+            // --- Там должна быть логика построения и получения цепочки сертификата но ее нету блин---
+            // Например:
+            CFDataRef cfCert = 
+            NSData *certData = (__bridge_transfer NSData *)cfCert;
+            NSError *error = nil;
+
+            blk(certData, genError);
+
+            [opts release];
+            [blk release];
+            dispatch_release(serialQ);
+        });
+        dispatch_release(serialQ);
+    } else {
+        NSError *err = createMobileActivationError(
+            "DeviceIdentityIssueClientCertificateWithCompletion",
+            860,       // код из дизассемблера (0x35C)
+            -1,        // subcode из дизассемблера (0xFFFFFFFF)
+            NULL,
+            CFSTR("Client is not supported.")
+        );
+        blk(nil, err);
+
+        [blk release];
+        [opts release];
+    }
+
+    if (queue) dispatch_release(queue);
+}
+```
+
+это все вовзращается в [DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:] и далее
+
 В DCClientHandler, в случае успеха app_id != nil
 ```
 objc_msgSend(init_DCDDeviceMetadata,
@@ -436,32 +620,4 @@ v4 здесь и есть блок, который XPC-демон вызовет
 
 
 
-
-что же в итоге
-
-# Цепочка генерации токена DeviceCheck
-
-1. **App → `DCDevice.generateToken`**  
-   Клиентский код инициирует запрос на генерацию токена.
-
-2. **XPC → `DCClientHandler.fetchOpaqueBlob`**  
-   `DCDeviceMetadataDaemonConnection` пересылает вызов демону `devicecheckd`.
-
-3. **`DCDDeviceMetadata.generateEncryptedBlob`**  
-   Формирует внутренний блок и проксирует в криптослой.
-
-4. **`DCCryptoProxyImpl.fetchOpaqueBlob`**  
-   Запускает логирование и передает контекст и публичный ключ в генератор сертификатов.
-
-5. **`DCCertificateGenerator.generateEncryptedCertificateChain`**  
-   Асинхронно собирает «сырую» цепочку сертификатов.
-
-6. **`_generateCertificateChain…` → `__74__…block_invoke` → `_encryptData`**  
-   Сериализует данные (CBOR), выполняет ECDH+HKDF, шифрует AES-GCM и возвращает зашифрованный blob.
-
-7. **`completion(rawChain, nil)` → `innerBlock(rawChain, nil)` → `completionBlock(encryptedBlob, nil)`**  
-   Внутренние блоки прокидывают результат до исходного XPC-блока.
-
-8. **XPC → App receives `NSData` token**  
-   Демон отправляет зашифрованный blob обратно в приложение по XPC.
 
