@@ -112,6 +112,8 @@ This method initiates asynchronous generation of the "encrypted blob" (token), p
     DCCryptoProxy *cryptoProxy = self->_cryptoProxy;
     DCContext      *context     = self->_context;
 
+
+    //    __57__DCDDeviceMetadata_generateEncryptedBlobWithCompletion___block_invoke // <- !!!!!!!
     void (^innerBlock)(NSData *rawChain, NSError *error) = ^(NSData *rawChain, NSError *error) {
         if (rawChain) {
             completion(rawChain, nil);
@@ -198,23 +200,31 @@ The block (`__74__…block_invoke`) handles rawChain encryption:
 
 ```objc
 void __fastcall __74__…block_invoke(int64_t block_ptr,
-                                     int64_t rawChain,
-                                     int64_t serverDate)
+                                     int64_t rawChain,      // a2
+                                     int64_t serverDate)     // a3
 {
     if (rawChain) {
         void *encryptor = *(void **)(block_ptr + 32);
+
+        //    - rawChain        : NSData *
+        //    - serverDate      : NSDate *
+        //    - &errorPointer   : NSError **
         NSError *error = nil;
         NSData *encryptedBlob = [encryptor _encryptData:rawChain
                                      serverSyncedDate:serverDate
-                                                 error:&error];
+                                                 error:&error]; 
+
         completion(encryptedBlob, error);
+
         [encryptedBlob release];
         [error release];
     } else {
         NSError *error = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror"
                                              code:0
                                          userInfo:nil];
+
         completion(nil, error);
+
         [error release];
     }
 }
@@ -240,33 +250,29 @@ A reconstructed (pseudocode) version of `_encryptData:serverSyncedDate:error:`:
     NSData   *clientAppIDRaw = [[[self clientAppID] dataUsingEncoding:NSUTF8StringEncoding] retain];
     NSError  *localError     = nil;
 
-    // Logging…
 
+    //  v27 = (void *)objc_claimAutoreleasedReturnValue_5(objc_msgSend(*(id *)(v25 + 16), "clientAppID"));
+    //  v28 = (void *)objc_claimAutoreleasedReturnValue_5(objc_msgSend(v27, "dataUsingEncoding:", 4LL));   
     const void *plainBytes = [plainData bytes];
     size_t      plainLen   = [plainData length];
     const void *appIDBytes = [clientAppIDRaw bytes];
     size_t      appIDLen   = [clientAppIDRaw length];
 
-    // ECDH: get public key
     uint8_t pubKeyBuf[65] = {0};
     aks_ref_key_get_public_key(self->_refKey, pubKeyBuf);
     // print pubKeyBuf…
 
-    // Compute shared secret with ECDH
     uint8_t  *sharedSecret = NULL;
     size_t    sharedLen    = 0;
     int ecdhOK = aks_ref_key_compute_key(
         pubKeyBuf, pubKeyBuf, &sharedSecret, &sharedLen);
     if (!ecdhOK) { goto cleanup; }
 
-    // HKDF (SHA256)
     uint8_t derivedKey[32] = {0};
     cchkdf(..., sharedSecret+2, sharedLen-2, derivedKey);
 
-    // Extract IV (12 bytes) from derivedKey
     uint8_t derivedIV[12]; memcpy(derivedIV, derivedKey+32, 12);
 
-    // Build envelope and payload buffers
     uint32_t envelopePayloadLen = appIDLen + plainLen + 81;
     size_t envelopeTotalLen = envelopePayloadLen + 154;
     uint8_t *envelope = calloc(1, envelopeTotalLen);
@@ -282,7 +288,6 @@ A reconstructed (pseudocode) version of `_encryptData:serverSyncedDate:error:`:
     *(uint32_t *)(payload+77) = plainLen;
     memcpy(payload+81+appIDLen, plainBytes, plainLen);
 
-    // AES-GCM encrypt payload into envelope+tag
     ccgcm_one_shot(sharedSecret, derivedKey, derivedIV, envelopePayloadLen, payload, 16, envelope+4);
 
     NSData *result = [[[NSData alloc] initWithBytes:envelope
@@ -304,10 +309,26 @@ cleanup:
 After this, the raw-chain generator `_generateCertificateChainWithCompletion:` is called:
 
 ```objc
-void __cdecl -[DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:](...)
+void __cdecl -[DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:](
+        DCCertificateGenerator *self,
+        SEL a2,
+        id a3)
 {
-  // prepare block struct …
-  objc_msgSend(self, "_generateCertificateChainWithCompletion:", blockStruct);
+  id v3; // x20
+  _QWORD v4[4]; // [xsp+0h] [xbp-40h] BYREF
+  DCCertificateGenerator *v5; // [xsp+20h] [xbp-20h]
+  id v6; // [xsp+28h] [xbp-18h]
+
+  v4[0] = _NSConcreteStackBlock_ptr;
+  v4[1] = 3221225472LL;
+  v4[2] = __74__DCCertificateGenerator_generateEncryptedCertificateChainWithCompletion___block_invoke;
+  v4[3] = &unk_20A9B2860;
+  v5 = self;
+  v6 = objc_retain(a3);
+  v3 = objc_retain(v6);
+  -[DCCertificateGenerator _generateCertificateChainWithCompletion:](v5, "_generateCertificateChainWithCompletion:", v4); // <------ !!!!!!
+  objc_release(v6);
+  objc_release(v3);
 }
 ```
 
@@ -322,22 +343,102 @@ unsigned int +[DCCryptoUtilities generateTTL](...) {
 In the block `__66__…block_invoke`, certificates are processed to PEM chain:
 
 ```objc
-void (^generateCertificateChainBlock)(NSArray *) = ^(NSArray *certificates) {
-    if (!certificates || certificates.count != 2) { … }
+void (^generateCertificateChainBlock)(NSArray *) = ^(NSArray *certificates) 
+{
+    os_log_t logger = os_log_create("com.apple.devicecheck", "DCCertificateGenerator");
+    if (os_log_type_enabled(logger, OS_LOG_TYPE_INFO)) {
+        os_log_info(logger, "Certificate issued, processing..");
+    }
+
+    NSDate *currentDate = [NSDate date];
+
+    if (!certificates || certificates.count != 2) {
+        NSDictionary *userInfo = @{
+            NSLocalizedDescriptionKey: @"Invalid inputs."
+        };
+        NSError *error = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror"
+                                             code:0
+                                         userInfo:userInfo];
+        
+        if (os_log_type_enabled(logger, OS_LOG_TYPE_ERROR)) {
+            os_log_error(logger, "Invalid certificate chain: %{public}@", error);
+        }
+        
+        completionBlock(nil, nil, error);
+        return;
+    }
+
     NSMutableData *certificateChainData = [NSMutableData data];
+    NSError *processingError = nil;
+
     for (NSUInteger i = 0; i < certificates.count; i++) {
-        SecCertificateRef cert = certificates[i];
-        NSData *derData = SecCertificateCopyData(cert);
+        SecCertificateRef certificate = (__bridge SecCertificateRef)certificates[i];
+        NSData *derData = (__bridge_transfer NSData *)SecCertificateCopyData(certificate);
+        
+        if (!derData) {
+            NSDictionary *userInfo = @{
+                NSLocalizedDescriptionKey: @"Failed to convert certificate."
+            };
+            processingError = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror"
+                                                  code:0
+                                              userInfo:userInfo];
+            break;
+        }
+
         NSString *pemHeader = @"-----BEGIN CERTIFICATE-----\n";
         NSString *pemFooter = @"\n-----END CERTIFICATE-----";
+        
         NSData *base64Data = [derData base64EncodedDataWithOptions:NSDataBase64Encoding64CharacterLineLength];
         NSString *base64String = [[NSString alloc] initWithData:base64Data encoding:NSUTF8StringEncoding];
+        
+        if (!base64String) {
+            NSDictionary *userInfo = @{
+                NSLocalizedDescriptionKey: @"Base64 encoding failed."
+            };
+            processingError = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror"
+                                                  code:0
+                                              userInfo:userInfo];
+            break;
+        }
+
         NSString *pemEntry = [NSString stringWithFormat:@"%@%@%@", pemHeader, base64String, pemFooter];
-        [certificateChainData appendData:[pemEntry dataUsingEncoding:NSUTF8StringEncoding]];
-        if (i > 0) [certificateChainData appendData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        NSData *pemData = [pemEntry dataUsingEncoding:NSUTF8StringEncoding];
+        
+        if (i > 0) {
+            [certificateChainData appendData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        }
+        [certificateChainData appendData:pemData];
     }
-    NSDate *validityDate = [NSDate date];
-    completionBlock(certificateChainData, validityDate, nil);
+
+    NSDate *validityDate = currentDate;
+    if (certificates.count >= 3) {
+        id potentialDate = certificates[2];
+        if ([potentialDate isKindOfClass:[NSDate class]]) {
+            validityDate = potentialDate;
+            if (os_log_type_enabled(logger, OS_LOG_TYPE_DEBUG)) {
+                os_log_debug(logger, "Using synced timestamp");
+            }
+        } else {
+            NSDictionary *userInfo = @{
+                NSLocalizedDescriptionKey: @"Expected date field, failing..."
+            };
+            processingError = [NSError errorWithDomain:@"com.apple.devicecheck.cryptoerror"
+                                                  code:0
+                                              userInfo:userInfo];
+        }
+    }
+
+    if (processingError) {
+        if (os_log_type_enabled(logger, OS_LOG_TYPE_ERROR)) {
+            os_log_error(logger, "Certificate processing failed: %{public}@", processingError);
+        }
+        completionBlock(nil, nil, processingError);
+    } else {
+        if (os_log_type_enabled(logger, OS_LOG_TYPE_INFO)) {
+            os_log_info(logger, "Certificate processed successfully. Size: %lu", (unsigned long)certificateChainData.length);
+        }
+        completionBlock(certificateChainData, validityDate, nil);
+    }
 };
 ```
 
@@ -349,19 +450,42 @@ void DeviceIdentityIssueClientCertificateWithCompletion_0(
     id identityOptions,
     DeviceIdentityCompletionBlock completionBlock)
 {
+    if (queue) dispatch_retain(queue);
+    id opts = [identityOptions retain];
+    DeviceIdentityCompletionBlock blk = [completionBlock copy];
+
     BOOL supported = isSupportedDeviceIdentityClient(NULL);
+
     if (supported) {
         dispatch_queue_t serialQ = copyDeviceIdentitySerialQueue();
         dispatch_async(serialQ, ^{
-            // Missing actual logic in disassembly
-            NSData *certData = ...;
+            // --- There should be logic for building and obtaining a chain certificate, but damn it, it's not there.---
+            CFDataRef cfCert = 
+            NSData *certData = (__bridge_transfer NSData *)cfCert;
+            NSError *error = nil;
+
             blk(certData, genError);
+
+            [opts release];
+            [blk release];
             dispatch_release(serialQ);
         });
+        dispatch_release(serialQ);
     } else {
-        NSError *err = createMobileActivationError(...);
+        NSError *err = createMobileActivationError(
+            "DeviceIdentityIssueClientCertificateWithCompletion",
+            860,      
+            -1,       
+            NULL,
+            CFSTR("Client is not supported.")
+        );
         blk(nil, err);
+
+        [blk release];
+        [opts release];
     }
+
+    if (queue) dispatch_release(queue);
 }
 ```
 
