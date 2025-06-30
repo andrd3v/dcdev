@@ -604,6 +604,7 @@ void DeviceIdentityIssueClientCertificateWithCompletion_0(
     if (queue) dispatch_release(queue);
 }
 ```
+но тут ида про начала глючить и проебала вызов функции __DeviceIdentityIssueClientCertificateWithCompletion_block_invoke
 
 это все вовзращается в [DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:] и далее
 
