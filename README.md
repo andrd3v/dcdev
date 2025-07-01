@@ -560,52 +560,50 @@ void (^generateCertificateChainBlock)(NSArray *) = ^(NSArray *certificates)
 далее вызов DeviceIdentityIssueClientCertificateWithCompletion_0(0LL, arc_r, v7);
 с нашими arc4random_uniform_0 и __66__DCCertificateGenerator__generateCertificateChainWithCompletion___block_invoke(это v7)
 ```objc
-void DeviceIdentityIssueClientCertificateWithCompletion_0(
-    dispatch_queue_t queue,
-    id identityOptions,
-    DeviceIdentityCompletionBlock completionBlock)
-{
-    if (queue) dispatch_retain(queue);
-    id opts = [identityOptions retain];
-    DeviceIdentityCompletionBlock blk = [completionBlock copy];
-
-    BOOL supported = isSupportedDeviceIdentityClient(NULL);
-
-    if (supported) {
-        dispatch_queue_t serialQ = copyDeviceIdentitySerialQueue();
-        dispatch_async(serialQ, ^{
-            // --- Там должна быть логика построения и получения цепочки сертификата но ее нету блин---
-            // Например:
-            CFDataRef cfCert = 
-            NSData *certData = (__bridge_transfer NSData *)cfCert;
-            NSError *error = nil;
-
-            blk(certData, genError);
-
-            [opts release];
-            [blk release];
-            dispatch_release(serialQ);
+void DeviceIdentityIssueClientCertificateWithCompletion(id obj1, id obj2, id obj3) {
+    id queue = nil;
+    id blockObj = nil;
+    id error = nil;
+    struct BlockStruct {
+        id blockType;
+        double someValue;
+        void (*invoke)(void);
+        void (*dispose)(void);
+        id retainedObj1;
+        id retainedObj2;
+        id retainedObj3;
+    } blockData = {0};
+    if (isSupportedDeviceIdentityClient(0, &blockObj)) {
+        queue = copyDeviceIdentitySerialQueue();
+        blockData.blockType = NSConcreteStackBlock;
+        blockData.invoke = DeviceIdentityIssueClientCertificateWithCompletion_block_invoke; // в этом методе цепочка построения сертификатов получения ключей и т д
+        blockData.dispose = Block_byref_object_dispose;
+        blockData.retainedObj1 = obj1;
+        blockData.retainedObj2 = obj2;
+        blockData.retainedObj3 = obj3;
+        dispatch_async(queue, ^{
+            blockData.invoke();
         });
-        dispatch_release(serialQ);
     } else {
-        NSError *err = createMobileActivationError(
+        // Create an error if the client is not supported
+        error = createMobileActivationError(
             "DeviceIdentityIssueClientCertificateWithCompletion",
-            860,       // код из дизассемблера (0x35C)
-            -1,        // subcode из дизассемблера (0xFFFFFFFF)
-            NULL,
-            CFSTR("Client is not supported.")
+            0x35C,                  // Error code
+            -1,                     // Additional parameter
+            blockObj,               // Context object
+            "Client is not supported." // Error message
         );
-        blk(nil, err);
-
-        [blk release];
-        [opts release];
     }
+}
 
-    if (queue) dispatch_release(queue);
+```
+тут мы видим что идет проверка isSupportedDeviceIdentityClient
+
+после чего если проверка проходит вызывается DeviceIdentityIssueClientCertificateWithCompletion_block_invoke
+```objc
+void __fastcall __DeviceIdentityIssueClientCertificateWithCompletion_block_invoke(NSObject *a1) {
 }
 ```
-но тут ида про начала глючить и проебала вызов функции __DeviceIdentityIssueClientCertificateWithCompletion_block_invoke
-
 это все вовзращается в [DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:] и далее
 
 В DCClientHandler, в случае успеха app_id != nil
