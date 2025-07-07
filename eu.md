@@ -29,7 +29,7 @@ if ( -[DCClientHandler _isSupported](self, "_isSupported") )
 
 The value of this check is hard-coded in `DeviceIdentityIsSupported` from the private framework:
 
-```c
+```objc
 __int64 DeviceIdentityIsSupported_1()
 {
   return 1LL;
@@ -83,8 +83,6 @@ In `DCClientHandler fetchOpaqueBlobWithCompletion` it calls:
 ```objc
 [DCDDeviceMetadata initWithContext:cryptoProxy:…];
 ```
-
-// I thought this might be hookable and vulnerable, but since this is a daemon, we cannot attack it, nor methods in the internal framework, nor can we create our own daemon to replace the DeviceCheck connection—we can only fully emulate its behavior.
 
 ```objc
 DCContext_class = objc_alloc_init((Class)&OBJC_CLASS___DCContext);
