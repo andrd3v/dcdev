@@ -443,49 +443,46 @@ void (^generateCertificateChainBlock)(NSArray *) = ^(NSArray *certificates)
 Finally, `DeviceIdentityIssueClientCertificateWithCompletion_0` is invoked to issue the client certificate:
 
 ```objc
-void DeviceIdentityIssueClientCertificateWithCompletion_0(
-    dispatch_queue_t queue,
-    id identityOptions,
-    DeviceIdentityCompletionBlock completionBlock)
-{
-    if (queue) dispatch_retain(queue);
-    id opts = [identityOptions retain];
-    DeviceIdentityCompletionBlock blk = [completionBlock copy];
-
-    BOOL supported = isSupportedDeviceIdentityClient(NULL);
-
-    if (supported) {
-        dispatch_queue_t serialQ = copyDeviceIdentitySerialQueue();
-        dispatch_async(serialQ, ^{
-            // --- There should be logic for building and obtaining a chain certificate, but damn it, it's not there.---
-            CFDataRef cfCert = 
-            NSData *certData = (__bridge_transfer NSData *)cfCert;
-            NSError *error = nil;
-
-            blk(certData, genError);
-
-            [opts release];
-            [blk release];
-            dispatch_release(serialQ);
+void DeviceIdentityIssueClientCertificateWithCompletion(id obj1, id obj2, id obj3) {
+    id queue = nil;
+    id blockObj = nil;
+    id error = nil;
+    struct BlockStruct {
+        id blockType;
+        double someValue;
+        void (*invoke)(void);
+        void (*dispose)(void);
+        id retainedObj1;
+        id retainedObj2;
+        id retainedObj3;
+    } blockData = {0};
+    if (isSupportedDeviceIdentityClient(0, &blockObj)) {
+        queue = copyDeviceIdentitySerialQueue();
+        blockData.blockType = NSConcreteStackBlock;
+        blockData.invoke = DeviceIdentityIssueClientCertificateWithCompletion_block_invoke;
+        blockData.dispose = Block_byref_object_dispose;
+        blockData.retainedObj1 = obj1;
+        blockData.retainedObj2 = obj2;
+        blockData.retainedObj3 = obj3;
+        dispatch_async(queue, ^{
+            blockData.invoke();
         });
-        dispatch_release(serialQ);
     } else {
-        NSError *err = createMobileActivationError(
+        // Create an error if the client is not supported
+        error = createMobileActivationError(
             "DeviceIdentityIssueClientCertificateWithCompletion",
-            860,      
-            -1,       
-            NULL,
-            CFSTR("Client is not supported.")
+            0x35C,                  // Error code
+            -1,                     // Additional parameter
+            blockObj,               // Context object
+            "Client is not supported." // Error message
         );
-        blk(nil, err);
-
-        [blk release];
-        [opts release];
     }
-
-    if (queue) dispatch_release(queue);
 }
 ```
+
+here we see that `isSupportedDeviceIdentityClient` is checked
+after which, if the check passes, `DeviceIdentityIssueClientCertificateWithCompletion_block_invoke` occurs
+`void __fastcall __DeviceIdentityIssueClientCertificateWithCompletion_block_invoke (NSObject *a1)`
 
 These results propagate back to `[DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:]` and, in `DCClientHandler`, on success (`app_id != nil`):
 
