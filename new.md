@@ -35,7 +35,7 @@ __int64 DeviceIdentityIsSupported_1()
 ***предположу, что если дсдевайс недоступен на девайсе, то там будет другая сборка фреймворка и там будет закодирован 0***
 
 
-после проверки поддрежки вызывается ```-[DCClientHandler _generateAppIDFromCurrentConnection]``` - этот метод получает <TeamID>.<BundleIdentifier> (формат: ABCDE12345.com.example.myApp) с помощью entitlements (-[NSXPCConnection valueForEntitlement:]), а если же этот вариант не сработает, то тогда с помощью ```SecTaskCopyTeamIdentifier``` и ```SecTaskCopySigningIdentifier```; если team_id валидный и не "0000000000", то метод объединяет через точку team_id и bundle_id, иначе использует только bundle_id. Возвращает appID (<TeamID>.<BundleIdentifier> или <BundleIdentifier>): ```return [appID length] ? appID : nil;```.
+после проверки поддрежки вызывается ```-[DCClientHandler _generateAppIDFromCurrentConnection]``` - этот метод получает ```<TeamID>.<BundleIdentifier>``` (формат: ```ABCDE12345.com.example.myApp```) с помощью entitlements (```-[NSXPCConnection valueForEntitlement:]```), а если же этот вариант не сработает, то тогда с помощью ```SecTaskCopyTeamIdentifier``` и ```SecTaskCopySigningIdentifier```; если team_id валидный и не "0000000000", то метод объединяет через точку team_id и bundle_id, иначе использует только bundle_id. Возвращает appID (<TeamID>.<BundleIdentifier> или <BundleIdentifier>): ```return [appID length] ? appID : nil;```.
 
 
 Вернемся в `-[DCClientHandler fetchOpaqueBlobWithCompletion]` (Важное уточнение: я не буду рассматривать фэлл-бек`и, когда код идет в else, где обрабатываются ошибки.)
