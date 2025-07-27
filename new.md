@@ -183,20 +183,22 @@ void __cdecl -[DCCryptoProxyImpl fetchOpaqueBlobWithContext:completion:](
     __block void (^blockCompletion)(NSData *, NSError *) = copiedCompletion;
 
     [self _fetchPublicKey:^(NSData *publicKey)
-    {
-        DCCertificateGenerator *generator = [[DCCertificateGenerator alloc]
-            initWithContext:blockContext
-                   publicKey:publicKey];
-
-        [generator generateEncryptedCertificateChainWithCompletion:
-                                  ^(NSData *encryptedChain, NSError *error)
-        {
-            blockCompletion(encryptedChain, error);
-            [blockCompletion release];
-            [blockContext release];
-            [generator release];
-        }];
-    }];
+      {
+          DCCertificateGenerator *generator = [[DCCertificateGenerator alloc]
+              initWithContext:blockContext
+                     publicKey:publicKey];
+  
+          [generator generateEncryptedCertificateChainWithCompletion:
+                                    ^(NSData *encryptedChain, NSError *error)
+            {
+                blockCompletion(encryptedChain, error);
+                [blockCompletion release];
+                [blockContext release];
+                [generator release];
+            }
+          ];
+      }
+    ];
 }
 ```
 
