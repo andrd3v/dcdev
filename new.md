@@ -121,7 +121,7 @@ id -[DCDDeviceMetadata initWithContext:cryptoProxy:](DCDDeviceMetadata *self, SE
   {
     // настраиваем поля из DCDDeviceMetadata
     j__objc_storeStrong((id *)&dc_device_metadata->_cryptoProxy, DCCryptoProxyImpl_class_arg);
-    j__objc_storeStrong((id *)&dc_device_metadata->_context, DCContext_class_arg);
+    j__objc_storeStrong((id *)&dc_device_metadata->_context, DCContext_class_arg);  // наш контекст с нашим <TeamID>.<BundleIdentifier> или <BundleIdentifier>
   }
 
   return (id *)dc_device_metadata;
@@ -133,3 +133,32 @@ id -[DCDDeviceMetadata initWithContext:cryptoProxy:](DCDDeviceMetadata *self, SE
 
 
 # Глава 2
+
+ 
+## ```DeviceCheckInternal.framework```
+***важная ремарка, почти все методы будут переработаны мной, для того, чтобы их было легко читать и понимать***
+
+
+Наш демон вызвал метод ```objc_msgSend(init_DCDDeviceMetadata, "generateEncryptedBlobWithCompletion:", v4);``` - это начало создания токена.
+
+
+```objc
+void __cdecl -[DCDDeviceMetadata generateEncryptedBlobWithCompletion:](DCDDeviceMetadata *self, SEL a2, id completion_arg)
+{
+  id v4 = objc_retain(completion_arg); // держим ретейн ссылку комплетиона
+
+  // как раз таки, что было настроенно в -[DCDDeviceMetadata initWithContext:cryptoProxy:]
+  DCCryptoProxy *cryptoProxy = self->_cryptoProxy;
+  DCContext *context = self->_context; // наш контекст с нашими <TeamID>.<BundleIdentifier> или <BundleIdentifier>
+
+  [cryptoProxy fetchOpaqueBlobWithContext:context
+                              completion:^(NSData *blob, NSError *error) {
+      // этот блок соответствует __57__DCDDeviceMetadata_generateEncryptedBlobWithCompletion___block_invoke
+      // берём указатель на исходный XPC‑блок‑completion, сохранённый при вызове.
+      // если аргумент a2 (данные) не нулевой, вызывается completion(data, nil).
+      // если a2 равен 0, создаётся NSError с кодом 0 и вызывается completion(nil, error).
+  }];
+}
+```
+
+
