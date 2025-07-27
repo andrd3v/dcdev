@@ -86,3 +86,43 @@ id __cdecl __noreturn -[DCContext clientAppID](DCContext *self, SEL a2)
 }
 ```
 
+
+Пропускаем аллокацию `DCDDeviceMetadata` и просматриваем `DCCryptoProxyImpl = objc_alloc_init((Class)&OBJC_CLASS___DCCryptoProxyImpl);` - аналогично, просто выделяется память под обьект, выставляется указатель на класс DCCryptoProxyImpl и вызывается `-[NSObject init]`.
+
+
+А вот теперь инициализируется наш `DCDDeviceMetadata`, который был просто аллоцирован. 
+```objc
+init_DCDDeviceMetadata = objc_msgSend(
+                           DCDDeviceMetadata,
+                           "initWithContext:cryptoProxy:",
+                           DCContext_class, // наш класс, который хранит <TeamID>.<BundleIdentifier> или <BundleIdentifier>
+                           DCCryptoProxyImpl); 
+```
+
+
+
+Что же происходит при ините `DCDDeviceMetadata`:
+```objc
+
+// мы на самом деле работаем с областью памяти экземпляра, а не с C‑структурой как таковой
+00000000 struct DCDDeviceMetadata // sizeof=0x18
+00000000 {
+00000000     unsigned __int8 superclass_opaque[8];
+00000008     DCCryptoProxy *_cryptoProxy;
+00000010     DCContext *_context;
+00000018 };
+
+id -[DCDDeviceMetadata initWithContext:cryptoProxy:](DCDDeviceMetadata *self, SEL a2, id DCContext_class_arg, id DCCryptoProxyImpl_class_arg)
+{
+  DCDDeviceMetadata *dc_device_metadata = -[DCDDeviceMetadata init](self, "init"); // -[NSObject init]
+
+  if ( v9 )
+  {
+    // настраиваем поля из DCDDeviceMetadata
+    j__objc_storeStrong((id *)&dc_device_metadata->_cryptoProxy, DCCryptoProxyImpl_class_arg);
+    j__objc_storeStrong((id *)&dc_device_metadata->_context, DCContext_class_arg);
+  }
+
+  return (id *)dc_device_metadata;
+}
+```
