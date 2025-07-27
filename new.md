@@ -185,7 +185,7 @@ void __cdecl -[DCCryptoProxyImpl fetchOpaqueBlobWithContext:completion:](
     [self _fetchPublicKey:^(NSData *publicKey)
       {
           DCCertificateGenerator *generator = [[DCCertificateGenerator alloc]
-              initWithContext:blockContext
+              initWithContext:blockContext // наш контекст с нашими <TeamID>.<BundleIdentifier> или <BundleIdentifier>
                      publicKey:publicKey];
   
           [generator generateEncryptedCertificateChainWithCompletion:
@@ -199,6 +199,154 @@ void __cdecl -[DCCryptoProxyImpl fetchOpaqueBlobWithContext:completion:](
           ];
       }
     ];
+}
+```
+
+### Разберемся с получением publicKey
+
+
+Сначала получается `publicKey`, а потом он передается дальше. Как же мы получаем паблик ключ:
+```objc
+void __cdecl -[DCCryptoProxyImpl _fetchPublicKey:](DCCryptoProxyImpl *self, SEL a2, id complation)
+{
+  /*
+  void *v4; // x20
+  id v5; // x19
+  _QWORD v6[4]; // [xsp+8h] [xbp-38h] BYREF
+  id v7; // [xsp+28h] [xbp-18h]
+
+  v4 = (void *)objc_claimAutoreleasedReturnValue_5(+[DCAssetFetcher sharedFetcher](&OBJC_CLASS___DCAssetFetcher, "sharedFetcher"));
+  v6[0] = _NSConcreteStackBlock_ptr;
+  v6[1] = 3221225472LL;
+  v6[2] = __37__DCCryptoProxyImpl__fetchPublicKey___block_invoke;
+  v6[3] = &unk_20A9B2838;
+  objc_msgSend(v4, "fetchPublicKeyAssetWithCompletion:", v6);
+  */
+
+  DCAssetFetcher *fetcher = [DCAssetFetcher sharedFetcher];
+  [fetcher fetchPublicKeyAssetWithCompletion:^(NSData *publicKey) {
+      completion(publicKey);
+  }];
+}
+```
+
+
+Этот метод вызывает `-[DCAssetFetcher fetchPublicKeyAssetWithCompletion:]`.
+```objc
+void __cdecl -[DCAssetFetcher fetchPublicKeyAssetWithCompletion:](DCAssetFetcher *self, SEL a2, id publicKeyCompletion)
+{
+  /*
+  DCAssetFetcherContext *v5 = objc_alloc_init(&OBJC_CLASS___DCAssetFetcherContext);
+  id v4 = objc_retain(publicKeyCompletion);
+
+  -[DCAssetFetcherContext setAllowCatalogRefresh:](v5, "setAllowCatalogRefresh:", 0LL);
+  -[DCAssetFetcher _fetchAssetWithContext:completionHandler:](self, "_fetchAssetWithContext:completionHandler:", v5, v4);
+  objc_release(v4);
+  objc_release(v5);
+  */
+
+  DCAssetFetcherContext *context = [[DCAssetFetcherContext alloc] init];
+  void (^completionBlock)(NSData *) = [publicKeyCompletion retain];
+
+  [context setAllowCatalogRefresh:NO]; // self->_allowCatalogRefresh = NO;
+  [self _fetchAssetWithContext:context
+        completionHandler:completionBlock];
+}
+```
+
+Пока что не комментирую, продолжаем идти по цепочке.
+```objc
+void __cdecl  -[DCAssetFetcher _fetchAssetWithContext:completionHandler:](
+        DCAssetFetcher *self,
+        SEL a2,
+        (DCAssetFetcherContext *)context, // другой контекст, без тим и бандл айди
+        id (void (^)(NSData *assetData, NSError *error))completion)
+{
+    DCAssetFetcherContext *retainedContext = [context retain];
+    void (^completionBlock)(NSData *, NSError *) = [completion retain];
+
+    if (os_log_type_enabled(self.logger, OS_LOG_TYPE_DEFAULT)) {
+        os_log(self.logger, "Querying...");
+    }
+
+    [self _queryMetadataWithContext:retainedContext
+                         completion:completionBlock];
+
+    [completionBlock release];
+    [retainedContext release];
+}
+```
+
+
+Начинается самое интересное - `_queryMetadataWithContext`.
+```objc
+void __cdecl __noreturn -[DCAssetFetcher _queryMetadataWithContext:completion:](
+        DCAssetFetcher *self,
+        SEL a2,
+        (DCAssetFetcherContext *)context, // другой контекст, без тим и бандл айди
+        completion:(void (^)(NSData *assetData, NSError *error))completion)
+{
+    DCAssetFetcherContext *retainedContext = [context retain];
+    void (^completionBlock)(NSData *, NSError *) = [completion retain];
+
+    if (os_log_type_enabled(self.logger, OS_LOG_TYPE_DEFAULT))
+    {
+        os_log(self.logger,
+               "Starting to fetch asset with context: %@",
+               retainedContext);
+    }
+
+    id assetQuery = [[self _assetQuery] retain]; // claimAutoreleasedReturnValue
+    NSUInteger resultCode = [assetQuery queryMetaDataSync]; // это все уже из libobjc.A
+
+    // Ветка пропуска кэша или отсутствия (ignoreCachedMetadata || resultCode == 2)
+    if ([retainedContext ignoreCachedMetadata] || resultCode == 2)
+    {
+        [self _handleMissingMetadataWithContext:retainedContext
+                                   completion:completionBlock];
+    } else {
+      if (resultCode != 0)
+      {
+          // Ошибка: генерируем NSError и сразу возвращаем
+          NSError *error = [NSError errorWithDomain:@"com.apple.twobit.fetcherror"
+                                               code:0xFFFF_FFFF_FFFF_F448
+                                           userInfo:nil];
+          completionBlock(nil, error);
+          [assetQuery release];
+          return;
+      }
+
+            // Успех: передаём данные вверх
+      [self _handleSuccessForQuery:assetQuery
+                              completion:completionBlock];
+    }
+
+    [assetQuery release];
+    [completionBlock release];
+    [retainedContext release];
+}
+```
+
+
+разберемся с инициализацией `generator`.
+```objc
+
+00000000 struct DCCertificateGenerator // sizeof=0x18
+00000000 {
+00000000     unsigned __int8 superclass_opaque[8];
+00000008     NSData *_publicKey;
+00000010     DCContext *_context;
+00000018 };
+
+id __cdecl -[DCCertificateGenerator initWithContext:publicKey:](DCCertificateGenerator *self, SEL a2, id context_arg, id publicKey_arg)
+{
+  DCCertificateGenerator *v9 = -[DCCertificateGenerator init](self, "init"); // -[NSObject init]
+  if ( v9 )
+  {
+    j__objc_storeStrong((id *)&v9->_publicKey, publicKey_arg); // наш полученный паблик_ключ
+    j__objc_storeStrong((id *)&v9->_context, context_arg); // наш контекст с нашими <TeamID>.<BundleIdentifier> или <BundleIdentifier>
+  }
+  return (id *)v9;
 }
 ```
 
