@@ -62,3 +62,10 @@ if ( app_id )
 
 
 Небольшой итог: Демон ```devicecheckd``` возвращает в ```DeviceCheck.framework``` зашифрованный токен (opaque blob) по XPC в блок ```completionHandler```, переданный через ```-[DCDDeviceMetadata generateEncryptedBlobWithCompletion:]```. Этот blob в дальнейшем используется как параметр token в ```-[DCDDeviceMetadata generateTokenWithCompletionHandler:]```.
+
+
+
+** Разберем последовательно, что происодит в методах классов DCContext_class, DCDDeviceMetadata, DCCryptoProxyImpl при их вызове в `-[DCClientHandler fetchOpaqueBlobWithCompletion]` **
+
+
+```DeviceCheckInternal.framework```
