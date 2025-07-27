@@ -25,7 +25,7 @@ NSXPCConnection *xpc_connection = (NSXPCConnection *)objc_msgSend(
 При получении соедниения демон вызвает ```-[DCXPCListener listener:shouldAcceptNewConnection:]``` -> ```-[DCClientHandler initWithConnection:]```, а после вызова RPC от клиента - > ```-[DCClientHandler fetchOpaqueBlobWithCompletion]```
 
 
-во первых  ```-[DCClientHandler fetchOpaqueBlobWithCompletion]``` вызывает ```if ( -[DCClientHandler _isSupported](self, "_isSupported") ) ```: значение этой переменной жестко закодирвоанно в ```DeviceIdentityIsSupported``` из ```DeviceIdentity```.
+во первых  ```-[DCClientHandler fetchOpaqueBlobWithCompletion]``` вызывает ```if ( -[DCClientHandler _isSupported](self, "_isSupported") ) ```: значение этой переменной жестко закодирвоанно в ```DeviceIdentityIsSupported``` из ```DeviceIdentity.framework```.
 ```objc
 __int64 DeviceIdentityIsSupported_1()
 {
