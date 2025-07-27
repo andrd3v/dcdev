@@ -161,7 +161,7 @@ void __cdecl -[DCDDeviceMetadata generateEncryptedBlobWithCompletion:](DCDDevice
 }
 ```
 
-Отлично, вызывается метод `-[DCCryptoProxy fetchOpaqueBlobWithContext:completion:]` в который передается наш контекст с нашими <TeamID>.<BundleIdentifier> или <BundleIdentifier>, ну а также комплетион. Ида плохо декомпилирует код, поэтому он будет чуть переписан.
+Отлично, вызывается метод `-[DCCryptoProxy fetchOpaqueBlobWithContext:completion:]` в который передается наш контекст с нашими ```<TeamID>.<BundleIdentifier>``` или `<BundleIdentifier>`, ну а также комплетион. Ида плохо декомпилирует код, поэтому он будет чуть переписан.
 
 ```objc
 void __cdecl -[DCCryptoProxyImpl fetchOpaqueBlobWithContext:completion:](
