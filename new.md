@@ -1,5 +1,6 @@
 переработка старого доклада по dcdevice 
 
+# Глава 1
 
 ## ```DeviceCheck.framework```
 
@@ -126,3 +127,9 @@ id -[DCDDeviceMetadata initWithContext:cryptoProxy:](DCDDeviceMetadata *self, SE
   return (id *)dc_device_metadata;
 }
 ```
+
+
+Отлично, все классы были проинициализированны и теперь демон ```devicecheckd``` вызывает ```objc_msgSend(init_DCDDeviceMetadata, "generateEncryptedBlobWithCompletion:", v4);``` - метод, который начнет геренацию токена.
+
+
+# Глава 2
