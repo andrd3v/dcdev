@@ -65,7 +65,7 @@ if ( app_id )
 
 
 
-** Разберем последовательно, что происодит в методах классов DCContext_class, DCDDeviceMetadata, DCCryptoProxyImpl при их вызове в `-[DCClientHandler fetchOpaqueBlobWithCompletion]` **
+**Разберем последовательно, что происодит в методах классов DCContext_class, DCDDeviceMetadata, DCCryptoProxyImpl при их вызове в `-[DCClientHandler fetchOpaqueBlobWithCompletion]`**
 
 
 ```DeviceCheckInternal.framework```
