@@ -170,17 +170,17 @@ void __cdecl -[DCCryptoProxyImpl fetchOpaqueBlobWithContext:completion:](
         id DCContext_argDCContext_arg,
         id completion_arg)
 {
-  // держим контекст(<TeamID>.<BundleIdentifier> или <BundleIdentifier>) и комплетион
-  id retainedContext = [DCContext_argDCContext_arg retain];
-  void (^copiedCompletion)(NSData *, NSError *) = [completion_arg copy];
-
-  if (os_log_type_enabled(self.logger, OS_LOG_TYPE_DEFAULT))
-  {
-    os_log(self.logger, "Generating certificate...");
-  }
-
-  __block id blockContext = retainedContext;
-  __block void (^blockCompletion)(NSData *, NSError *) = copiedCompletion;
+    // держим контекст(<TeamID>.<BundleIdentifier> или <BundleIdentifier>) и комплетион
+    id retainedContext = [DCContext_argDCContext_arg retain];
+    void (^copiedCompletion)(NSData *, NSError *) = [completion_arg copy];
+  
+    if (os_log_type_enabled(self.logger, OS_LOG_TYPE_DEFAULT))
+    {
+      os_log(self.logger, "Generating certificate...");
+    }
+  
+    __block id blockContext = retainedContext;
+    __block void (^blockCompletion)(NSData *, NSError *) = copiedCompletion;
 
     [self _fetchPublicKey:^(NSData *publicKey)
     {
