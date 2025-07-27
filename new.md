@@ -161,4 +161,42 @@ void __cdecl -[DCDDeviceMetadata generateEncryptedBlobWithCompletion:](DCDDevice
 }
 ```
 
+Отлично, вызывается метод `-[DCCryptoProxy fetchOpaqueBlobWithContext:completion:]` в который передается наш контекст с нашими <TeamID>.<BundleIdentifier> или <BundleIdentifier>, ну а также комплетион. Ида плохо декомпилирует код, поэтому он будет чуть переписан.
+
+```objc
+void __cdecl -[DCCryptoProxyImpl fetchOpaqueBlobWithContext:completion:](
+        DCCryptoProxyImpl *self,
+        SEL a2,
+        id DCContext_argDCContext_arg,
+        id completion_arg)
+{
+  // держим контекст(<TeamID>.<BundleIdentifier> или <BundleIdentifier>) и комплетион
+  id retainedContext = [DCContext_argDCContext_arg retain];
+  void (^copiedCompletion)(NSData *, NSError *) = [completion_arg copy];
+
+  if (os_log_type_enabled(self.logger, OS_LOG_TYPE_DEFAULT))
+  {
+    os_log(self.logger, "Generating certificate...");
+  }
+
+  __block id blockContext = retainedContext;
+  __block void (^blockCompletion)(NSData *, NSError *) = copiedCompletion;
+
+    [self _fetchPublicKey:^(NSData *publicKey)
+    {
+        DCCertificateGenerator *generator = [[DCCertificateGenerator alloc]
+            initWithContext:blockContext
+                   publicKey:publicKey];
+
+        [generator generateEncryptedCertificateChainWithCompletion:
+                                  ^(NSData *encryptedChain, NSError *error)
+        {
+            blockCompletion(encryptedChain, error);
+            [blockCompletion release];
+            [blockContext release];
+            [generator release];
+        }];
+    }];
+}
+```
 
