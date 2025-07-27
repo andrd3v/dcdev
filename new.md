@@ -116,7 +116,7 @@ id -[DCDDeviceMetadata initWithContext:cryptoProxy:](DCDDeviceMetadata *self, SE
 {
   DCDDeviceMetadata *dc_device_metadata = -[DCDDeviceMetadata init](self, "init"); // -[NSObject init]
 
-  if ( v9 )
+  if ( dc_device_metadata )
   {
     // настраиваем поля из DCDDeviceMetadata
     j__objc_storeStrong((id *)&dc_device_metadata->_cryptoProxy, DCCryptoProxyImpl_class_arg);
