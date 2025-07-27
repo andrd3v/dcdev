@@ -65,7 +65,22 @@ if ( app_id )
 
 
 
-**Разберем последовательно, что происодит в методах классов DCContext_class, DCDDeviceMetadata, DCCryptoProxyImpl при их вызове в `-[DCClientHandler fetchOpaqueBlobWithCompletion]`**
+**Разберем последовательно, что происодит в методах классов DCContext, DCDDeviceMetadata, DCCryptoProxyImpl при их вызове в `-[DCClientHandler fetchOpaqueBlobWithCompletion]`**
 
 
 ```DeviceCheckInternal.framework```
+Первое, что происходит в `-[DCClientHandler fetchOpaqueBlobWithCompletion]` это инициализация DCContext и присваивание ему наш ```<TeamID>.<BundleIdentifier>``` или ```<BundleIdentifier>```:
+
+```objc
+DCContext_class = objc_alloc_init((Class)&OBJC_CLASS___DCContext);
+objc_msgSend(DCContext_class, "setClientAppID:", app_id);
+```
+
+Так как у DCContext нет метода `-init`, то он просто наследует реализацию метода от NSObject. Выделяется память под объект и выставляется указатель на класс DCContext. Поля, например `_clientAppID` при этом обнуляются. Далее посылается объекту DCContext селектор `-init`. Поскольку DCContext не переопределяет этот метод, в дело вступает стандартный `-[NSObject init]`, который просто возвращает self без дополнительной логики. После вызывается метод `-[DCContext setClientAppID:]`, который выставляет в `self->_clientAppID` наш ```<TeamID>.<BundleIdentifier>``` или ```<BundleIdentifier>```:
+```objc
+id __cdecl __noreturn -[DCContext clientAppID](DCContext *self, SEL a2)
+{
+  return objc_getProperty_33(self, a2, 8LL, 1);
+}
+```
+
