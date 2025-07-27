@@ -65,10 +65,12 @@ if ( app_id )
 
 
 
-**Разберем последовательно, что происодит в методах классов DCContext, DCDDeviceMetadata, DCCryptoProxyImpl при их вызове в `-[DCClientHandler fetchOpaqueBlobWithCompletion]`**
+*Разберем последовательно, что происодит в методах классов DCContext, DCDDeviceMetadata, DCCryptoProxyImpl при их вызове в `-[DCClientHandler fetchOpaqueBlobWithCompletion]`*
 
 
 ```DeviceCheckInternal.framework```
+
+
 Первое, что происходит в `-[DCClientHandler fetchOpaqueBlobWithCompletion]` это инициализация DCContext и присваивание ему наш ```<TeamID>.<BundleIdentifier>``` или ```<BundleIdentifier>```:
 
 ```objc
