@@ -1,7 +1,7 @@
 переработка старого доклада по dcdevice 
 
 
-```DeviceCheck.framework```
+## ```DeviceCheck.framework```
 
 
 при создании токена из дсдевайс используется ```[DCDevice generateTokenWithCompletionHandler:]``` - внутри себя она вызывает ```DCDeviceMetadataDaemonConnection```
@@ -16,7 +16,7 @@ NSXPCConnection *xpc_connection = (NSXPCConnection *)objc_msgSend(
 ```
 
 
-```devicecheckd```
+## ```devicecheckd```
 
 
 После подключения к демону ```devicecheckd``` по xpc запускается нижеописанная цепочка.
@@ -65,10 +65,10 @@ if ( app_id )
 
 
 
-*Разберем последовательно, что происодит в методах классов DCContext, DCDDeviceMetadata, DCCryptoProxyImpl при их вызове в `-[DCClientHandler fetchOpaqueBlobWithCompletion]`*
+## Разберем последовательно, что происодит в методах классов DCContext, DCDDeviceMetadata, DCCryptoProxyImpl при их вызове в `-[DCClientHandler fetchOpaqueBlobWithCompletion]`
 
 
-```DeviceCheckInternal.framework```
+## ```DeviceCheckInternal.framework```
 
 
 Первое, что происходит в `-[DCClientHandler fetchOpaqueBlobWithCompletion]` это инициализация DCContext и присваивание ему наш ```<TeamID>.<BundleIdentifier>``` или ```<BundleIdentifier>```:
