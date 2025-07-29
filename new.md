@@ -327,6 +327,123 @@ void __cdecl __noreturn -[DCAssetFetcher _queryMetadataWithContext:completion:](
 }
 ```
 
+```objc
+- (void)_handleMissingMetadataWithContext:(DCAssetFetchContext *)context
+                               completion:(void (^)(DCAsset *asset, NSError *error))completion {
+    NSLog(@"[DCAssetFetcher] Query sync result indicated missing asset catalog");
+
+    if (context.allowCatalogRefresh) {
+        context.allowCatalogRefresh = NO;
+        context.ignoreCachedMetadata = NO;
+
+        // запускаем обновление ассет-каталога и повторим запрос после завершения
+        [self->_assetQuery refreshCatalogWithCompletion:^{
+            [self _queryMetadataWithContext:context completion:completion];
+        }];
+        return;
+    }
+
+    NSError *error = [NSError errorWithDomain:@"com.apple.twobit.fetcherror"
+                                         code:-3101
+                                     userInfo:nil];
+    completion(nil, error);
+}
+```
+
+```objc
+- (void)_handleSuccessForQuery:(DCAssetQuery *)query
+                    completion:(void (^)(DCAsset *asset, NSError *error))completion {
+    NSArray *results = [query results];
+
+    if (results.count == 0) {
+        NSError *error = [NSError errorWithDomain:@"com.apple.twobit.fetcherror"
+                                             code:-3100
+                                         userInfo:nil];
+        completion(nil, error);
+        return;
+    }
+
+    if (results.count > 1) {
+        NSLog(@"[DCAssetFetcher] Warning: more than one asset found, using first one");
+    }
+
+    NSDictionary *mobileAsset = results.firstObject;
+
+    NSError *validationError = nil;
+    DCAsset *asset = [self _validateAsset:mobileAsset error:&validationError];
+
+    if (!asset) {
+        completion(nil, validationError);
+        return;
+    }
+
+    [[DCXPCActivityController sharedInstance] updateActivityScheduleWithAsset:asset];
+    completion(asset, nil);
+}
+```
+
+
+```objc
+- (DCAsset *)_validateAsset:(NSDictionary *)mobileAsset error:(NSError **)error {
+    DCAsset *asset = [DCAsset assetWithMobileAsset:mobileAsset];
+    if (!asset) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"com.apple.twobit.fetcherror"
+                                         code:-3200
+                                     userInfo:nil];
+        }
+        return nil;
+    }
+    return asset;
+}
+```
+
+```objc
++ (DCAsset *)assetWithMobileAsset:(NSDictionary *)mobileAsset {
+    NSNumber *version = mobileAsset[@"com.apple.MobileAsset.AssetVersion"];
+    if (![version isKindOfClass:[NSNumber class]] || version.integerValue != 1) {
+        NSLog(@"[DCAsset] Unknown asset version: %@", version);
+        return nil;
+    }
+
+    NSData *pubKeyData = mobileAsset[@"com.apple.devicecheck.pubvalue"]; //assetProperty:
+    if (![pubKeyData isKindOfClass:[NSData class]] || pubKeyData.length == 0) {
+        NSLog(@"[DCAsset] No public key found in asset");
+        return nil;
+    }
+
+    DCAsset *asset = [[DCAsset alloc] init];
+    asset.version = 1;
+    asset.publicKey = pubKeyData;
+
+    NSNumber *refreshInterval = mobileAsset[@"com.apple.devicecheck.refreshtimer"]; //assetProperty:
+    if ([refreshInterval isKindOfClass:[NSNumber class]]) {
+        asset.publicKeyRefreshInterval = refreshInterval.doubleValue;
+    }
+
+    return asset;
+}
+```
+
+```objc
+- (void)updateActivityScheduleWithAsset:(DCAsset *)asset {
+    if (asset.publicKeyRefreshInterval <= 0) return;
+
+    NSDictionary *criteria = @{
+        XPC_ACTIVITY_INTERVAL : @(asset.publicKeyRefreshInterval),
+        XPC_ACTIVITY_REPEATING : @YES,
+        XPC_ACTIVITY_REQUIRE_NETWORK : @YES
+    };
+
+    xpc_activity_register("com.apple.devicecheck.notify", criteria, ^(xpc_activity_t activity) {
+        [[DCAssetFetcher sharedInstance] performMetadataRefreshForActivity];
+    });
+}
+```
+
+
+
+
 
 разберемся с инициализацией `generator`.
 ```objc
