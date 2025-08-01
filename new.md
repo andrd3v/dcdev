@@ -462,6 +462,53 @@ r8� ]u���O5�Y+������*�g�t��_}�jiO���
 
 
 
+# Глава 3
+## ```DeviceCheckInternal.framework```
+***важная ремарка, почти все методы будут переработаны мной, для того, чтобы их было легко читать и понимать***
+
+
+вернемся в fetchOpaqueBlobWithContext
+
+```objc
+void __cdecl -[DCCryptoProxyImpl fetchOpaqueBlobWithContext:completion:](
+        DCCryptoProxyImpl *self,
+        SEL a2,
+        id DCContext_argDCContext_arg,
+        id completion_arg)
+{
+    // держим контекст(<TeamID>.<BundleIdentifier> или <BundleIdentifier>) и комплетион
+    id retainedContext = [DCContext_argDCContext_arg retain];
+    void (^copiedCompletion)(NSData *, NSError *) = [completion_arg copy];
+  
+    if (os_log_type_enabled(self.logger, OS_LOG_TYPE_DEFAULT))
+    {
+      os_log(self.logger, "Generating certificate...");
+    }
+  
+    __block id blockContext = retainedContext;
+    __block void (^blockCompletion)(NSData *, NSError *) = copiedCompletion;
+
+    [self _fetchPublicKey:^(NSData *publicKey) // мы получили наш ключ
+      {
+          DCCertificateGenerator *generator = [[DCCertificateGenerator alloc]
+              initWithContext:blockContext // наш контекст с нашими <TeamID>.<BundleIdentifier> или <BundleIdentifier>
+                     publicKey:publicKey]; // наш ключ
+  
+          [generator generateEncryptedCertificateChainWithCompletion:
+                                    ^(NSData *encryptedChain, NSError *error)
+            {
+                blockCompletion(encryptedChain, error);
+                [blockCompletion release];
+                [blockContext release];
+                [generator release];
+            }
+          ];
+      }
+    ];
+}
+```
+
+
 разберемся с инициализацией `generator`.
 ```objc
 
