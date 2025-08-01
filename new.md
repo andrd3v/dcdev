@@ -442,6 +442,23 @@ void __cdecl __noreturn -[DCAssetFetcher _queryMetadataWithContext:completion:](
 ```
 
 
+и самое смешное - это все не нужно и это неверный путь, правильный ключ лежит в ```__37__DCCryptoProxyImpl__fetchPublicKey___block_invoke```
+```objc
++[NSData dataWithBytes:length:](&OBJC_CLASS___NSData, "dataWithBytes:length:", &fallback_server_pubkey, 65LL);
+```
+
+он жестко закодирвоан и одинаковый на всех версиях мак ос и иос и айпад ос:
+`0450d934fa67bcf6f2dfbf96629e0a7238e9205d75f28cfcd84f35a6592bbe058a9c0f8edbca2acb67efb774971ca45f7d856a694fb1b9c40b94fb2e7a5a9498b0`
+это 130 байтов ключа-сам ключ 65 символов
+```
+╭─    ~ ······························································································································· ✔  at 12:04:28 
+╰─ unhex 0450d934fa67bcf6f2dfbf96629e0a7238e9205d75f28cfcd84f35a6592bbe058a9c0f8edbca2acb67efb774971ca45f7d856a694fb1b9c40b94fb2e7a5a9498b0
+P�4�g���߿�b�
+r8� ]u���O5�Y+������*�g�t��_}�jiO���
+                                    ��.zZ���%
+```
+
+вот и наш паблик ключик.
 
 
 
