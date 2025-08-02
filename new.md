@@ -531,3 +531,192 @@ id __cdecl -[DCCertificateGenerator initWithContext:publicKey:](DCCertificateGen
 }
 ```
 
+
+после успешной инициализации вызывается generateEncryptedCertificateChainWithCompletion - создание токена
+```objc
+void __cdecl -[DCCertificateGenerator generateEncryptedCertificateChainWithCompletion:](
+        DCCertificateGenerator *self,
+        SEL a2,
+        id a3)
+{
+  id v3; // x20
+  _QWORD v4[4]; // [xsp+0h] [xbp-40h] BYREF
+  DCCertificateGenerator *v5; // [xsp+20h] [xbp-20h]
+  id v6; // [xsp+28h] [xbp-18h]
+
+  v4[0] = _NSConcreteStackBlock_ptr;
+  v4[1] = 3221225472LL;
+  v4[2] = __74__DCCertificateGenerator_generateEncryptedCertificateChainWithCompletion___block_invoke;
+  v4[3] = &unk_20A9B2860;
+  v5 = self;
+  v6 = objc_retain(a3);
+  v3 = objc_retain(v6);
+  -[DCCertificateGenerator _generateCertificateChainWithCompletion:](v5, "_generateCertificateChainWithCompletion:", v4);
+  objc_release(v6);
+  objc_release(v3);
+}
+```
+
+
+Первое-надо получить серт: `_generateCertificateChainWithCompletion`, а дальше передать его в `__74__DCCertificateGenerator_generateEncryptedCertificateChainWithCompletion___block_invoke`
+
+
+
+
+
+
+
+
+
+
+создадим токен
+```objc
+- (NSData *)_encryptData:(NSData *)data //серт
+        serverSyncedDate:(NSDate *)serverDate 
+                    error:(NSError **)error {
+    // Log start of encryption
+    os_log_t log = os_log_create("com.apple.devicecheck", "DeviceCheck");
+    if (os_log_type_enabled(log, OS_LOG_TYPE_DEFAULT)) {
+        os_log(log, "Encrypting data...");
+    }
+
+    // Get client App ID as UTF-8 data
+    NSString *clientAppID = [self.context clientAppID];
+    NSData *clientAppData = [clientAppID dataUsingEncoding:NSUTF8StringEncoding];
+    NSUInteger clientAppLen = clientAppData.length;
+    const void *clientAppBytes = clientAppData.bytes;
+
+    // Prepare input data
+    NSUInteger inputLen = data.length;
+    const void *inputBytes = data.bytes;
+
+    // Current timestamp from server-synced date
+    NSTimeInterval timestamp = [serverDate timeIntervalSince1970];
+
+    // AES-GCM mode descriptor from CommonCrypto
+    const struct ccmode_gcm *gcm = ccaes_gcm_encrypt_mode();
+
+    // Allocate buffers: output and plaintext payload
+    size_t payloadLen = inputLen + clientAppLen + 81;
+    size_t outputLen = inputLen + clientAppLen + 235;
+    uint8_t *outBuf = calloc(1, outputLen);
+    if (!outBuf) {
+        if (error) *error = [NSError errorWithDomain:@"DeviceCheckError"
+                                                code:-1 
+                                            userInfo:nil];
+        return nil;
+    }
+    uint8_t *payloadBuf = calloc(1, payloadLen);
+    if (!payloadBuf) {
+        free(outBuf);
+        if (error) *error = [NSError errorWithDomain:@"DeviceCheckError"
+                                                code:-1 
+                                            userInfo:nil];
+        return nil;
+    }
+
+    // Write header/type (value 2) and payload length in outBuf
+    *((uint32_t *)outBuf) = 2;
+    *((uint32_t *)(outBuf + 150)) = (uint32_t)payloadLen;
+
+    // Copy device's static public key into outBuf at offset 5
+    NSData *devicePubKeyData = self.publicKey;  // NSData containing the public key bytes
+    memcpy(outBuf + 5, devicePubKeyData.bytes, devicePubKeyData.length);
+
+    // Assemble payload: [timestamp (8 bytes), inputLen (4 bytes), clientAppLen (4 bytes), inputBytes, clientAppBytes]
+    *((uint32_t *)(payloadBuf + 73)) = (uint32_t)inputLen;
+    memcpy(payloadBuf + 81, inputBytes, inputLen);
+    *((uint32_t *)(payloadBuf + 77)) = (uint32_t)clientAppLen;
+    memcpy(payloadBuf + 81 + inputLen, clientAppBytes, clientAppLen);
+    *((uint64_t *)(payloadBuf + 65)) = (uint64_t)timestamp;
+
+    // Log system call (no-op with 0) as seen in disassembly
+    DCLogSystem(0);
+
+    // Create ephemeral ECDH key using the keybag
+    id keybag = [self keybagHandle];
+    uint64_t refKey = 0;
+    int aksErr = aks_ref_key_create((__int64)keybag, 11, 4, 0, 0, &refKey);
+    if (aksErr != 0) {
+        DCLogSystem(aksErr);
+        free(outBuf);
+        free(payloadBuf);
+        if (error) *error = [NSError errorWithDomain:@"DeviceCheckError"
+                                                code:aksErr 
+                                            userInfo:nil];
+        return nil;
+    }
+
+    // Get ephemeral public key (should be 65 bytes) and copy it
+    size_t ecdhPubLen = 0;
+    const uint8_t *ecdhPub = (const uint8_t *)aks_ref_key_get_public_key(refKey, &ecdhPubLen);
+    if (ecdhPubLen != 65) {
+        DCLogSystem(ecdhPubLen);
+        free(outBuf);
+        free(payloadBuf);
+        if (error) *error = [NSError errorWithDomain:@"DeviceCheckError"
+                                                code:-2 
+                                            userInfo:nil];
+        return nil;
+    }
+    memcpy(outBuf + 85, ecdhPub, ecdhPubLen);
+
+    // Compute ECDH shared secret with device's static public key
+    const uint8_t *devicePubBytes = devicePubKeyData.bytes;
+    size_t devicePubLen = devicePubKeyData.length;
+    int ecdhErr = aks_ref_key_compute_key(refKey, 0, 0, (__int64)devicePubBytes, devicePubLen);
+    if (ecdhErr != 0) {
+        DCLogSystem(ecdhErr);
+        free(outBuf);
+        free(payloadBuf);
+        if (error) *error = [NSError errorWithDomain:@"DeviceCheckError"
+                                                code:ecdhErr 
+                                            userInfo:nil];
+        return nil;
+    }
+
+    // The shared secret is at refKey; skip first 2 bytes (per disassembly analysis)
+    uint8_t *sharedSecret = (uint8_t *)refKey + 2;
+    size_t sharedLen = devicePubLen - 2;
+
+    // Derive key material with HKDF-SHA256 (44 bytes: 32-byte key + 12-byte IV)
+    uint8_t hkdfOut[44];
+    cchkdf(ccsha256_di(), sharedLen, sharedSecret, 0, NULL, 0x2C /*44 bytes*/, hkdfOut);
+    uint8_t *aesKey = hkdfOut;          // first 32 bytes
+    uint8_t *aesIV = hkdfOut + 32;      // next 12 bytes
+
+    // Encrypt payloadBuf with AES-GCM; tag-> outBuf+1, ciphertext-> outBuf+154
+    int gcmErr = ccgcm_one_shot(gcm,
+                                32, aesKey,
+                                12, aesIV,
+                                0, NULL,
+                                payloadLen, payloadBuf,
+                                outBuf + 154,
+                                16, outBuf + 1);
+    if (gcmErr != 0) {
+        DCLogSystem(gcmErr);
+        free(outBuf);
+        free(payloadBuf);
+        if (error) *error = [NSError errorWithDomain:@"DeviceCheckError"
+                                                code:gcmErr 
+                                            userInfo:nil];
+        return nil;
+    }
+
+    // Build NSData for the encrypted payload
+    NSData *encryptedData = [NSData dataWithBytes:outBuf length:outputLen];
+
+    // Log base64 payload if logging is enabled
+    if (os_log_type_enabled(log, OS_LOG_TYPE_DEFAULT)) {
+        NSData *b64 = [encryptedData base64EncodedDataWithOptions:0];
+        NSString *payloadStr = [[NSString alloc] initWithData:b64
+                                                     encoding:NSUTF8StringEncoding];
+        os_log(log, "\nPayload (base64):\n%{public}s\n\n", payloadStr.UTF8String);
+    }
+
+    free(outBuf);
+    free(payloadBuf);
+    return encryptedData;
+}
+```
+
