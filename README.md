@@ -1,7 +1,7 @@
 ### Работу выполнил [andrd3v](https://github.com/andrd3v). Помощь предоставил [whoeevee](https://github.com/whoeevee). Спасибо, что прочли!
 
 
-переработка моего старого доклада по dcdevice 
+переработка моего старого приват доклада по dcdevice 
 
 # Глава 1
 
