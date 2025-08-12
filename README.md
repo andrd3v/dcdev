@@ -793,3 +793,5 @@ EYejw/otUrfGGITiAiEAuLs1MYHGWuUdhyofXfY0S45GsSYXA/g8ombHMkcU54A=
 
 ## Работу выполнил [andrd3v](https://github.com/andrd3v). Помощь предоставил [whoeevee](https://github.com/whoeevee). Спасибо, что прочли!
 
+
+Reverse-engineered DeviceCheck token generator docs.
