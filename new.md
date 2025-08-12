@@ -788,5 +788,5 @@ EYejw/otUrfGGITiAiEAuLs1MYHGWuUdhyofXfY0S45GsSYXA/g8ombHMkcU54A=
 Надеюсь этот доклад сделал чуточку понятнее, почему девайсчек такая фиготень. В теори это можно обойти(как минимум юзать свои полученные серты), но мне лень это делать. 
 
 
-Работу выполнил [andrd3v](https://github.com/andrd3v). Помощь предоставил [whoeevee](https://github.com/whoeevee). Спасибо, что прочли!
+## Работу выполнил [andrd3v](https://github.com/andrd3v). Помощь предоставил [whoeevee](https://github.com/whoeevee). Спасибо, что прочли!
 
