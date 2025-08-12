@@ -558,20 +558,81 @@ void __cdecl -[DCCertificateGenerator generateEncryptedCertificateChainWithCompl
 ```
 
 
-Первое-надо получить серт: `_generateCertificateChainWithCompletion`, а дальше передать его в `__74__DCCertificateGenerator_generateEncryptedCertificateChainWithCompletion___block_invoke`
+Первое-надо получить серт: `_generateCertificateChainWithCompletion`, а дальше передать его в `__74__DCCertificateGenerator_generateEncryptedCertificateChainWithCompletion___block_invoke` - тут он передастся в _encryptData, там где и создается токен
 
+короче все это - получение двух корневых сертификатов из кейчейн- в теории это можно отреверсить или повторить логику(в чем я супер сомневаюсь, потому что там кейчейн), но получение серта идет в __DeviceIdentityIssueClientCertificateWithCompletion_block_invoke
 
+вот примеры сертификатов из аргумента
+```
+-----BEGIN CERTIFICATE-----
+MIIDPjCCAuWgAwIBAgIGAZhghIx7MAoGCCqGSM49BAMCMFMxJzAlBgNVBAMMHkJh
+c2ljIEF0dGVzdGF0aW9uIFVzZXIgU3ViIENBMTETMBEGA1UECgwKQXBwbGUgSW5j
+LjETMBEGA1UECAwKQ2FsaWZvcm5pYTAeFw0yNTA3MzAxMjQ1NTZaFw0yNjA3MTQy
+MDE2NTZaMIGRMUkwRwYDVQQDDEA5ZjE2ZTNiNDU3OWY3Y2Q4MzBjMWFjNTNhM2Y2
+MDk2MmFlZWIyMDgzMTgwNzI4Y2UzNTMyNmM2Y2JhZDdlOTIzMRowGAYDVQQLDBFC
+QUEgQ2VydGlmaWNhdGlvbjETMBEGA1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwK
+Q2FsaWZvcm5pYTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABOY3WyNGuRO+wcrp
+t2Yb6ARssM0g5GFCy302nZQ3p/DPxR3cG4wqLK73zYEiKjUXU1Uv0bgbV61CmTSv
+Pkd0KmejggFkMIIBYDAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIE8DCCAT4G
+CSqGSIb3Y2QKAQSCAS8EggErMYIBJ/+EmqGSUA0wCxYEQ0hJUAIDAIAV/4SqjZJE
+ETAPFgRFQ0lEAgcKTVwAaAAu/4aTtcJjGzAZFgRibWFjBBFkNDphMzozZDozNDo2
+YTowMP+Gy7XKaRkwFxYEaW1laQQPMzU5NDA0MDgyMDM4NzA1/4ebydxtFjAUFgRz
+cm5tBAxGSzJWTUREVUpDTDj/h6uR0mQyMDAWBHVkaWQEKDU1MzcwZjUyYWQwOWRi
+YmEyYjZhYTcwZDM4ZjZmMjc5NzExYmYxNmX/h7u1wmMbMBkWBHdtYWMEEWQ0OmEz
+OjNkOjM0OjY5OmRm/4ebldJkOjA4FgRzZWlkBDAwNDI0MzEyQjFFNDM4MDAxNzIx
+OTE0MTgyNTk0Mjg0NDdCRjZFMzJCQzNCN0YwQ0YwCgYIKoZIzj0EAwIDRwAwRAIg
+LNjRS4pu3925qkoourOxUM3L+8hwVYbT/35bIW9q5KQCICf4Xpvuvdx/DMBbr5Wp
+9GXn0bxP69/8S99Z9x+t0ow0
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIICIzCCAaigAwIBAgIIeNjhG9tnDGgwCgYIKoZIzj0EAwIwUzEnMCUGA1UEAwwe
+QmFzaWMgQXR0ZXN0YXRpb24gVXNlciBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJ
+bmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMB4XDTE3MDQyMDAwNDIwMFoXDTMyMDMy
+MjAwMDAwMFowUzEnMCUGA1UEAwweQmFzaWMgQXR0ZXN0YXRpb24gVXNlciBTdWIg
+Q0ExMRMwEQYDVQQKDApBcHBsZSBJbmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMFkw
+EwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEoSZ/1t9eBAEVp5a8PrXacmbGb8zNC1X3
+StLI9YO6Y0CL7blHmSGmjGWTwD4Q+i0J2BY3+bPHTGRyA9jGB3MSbaNmMGQwEgYD
+VR0TAQH/BAgwBgEB/wIBADAfBgNVHSMEGDAWgBSD5aMhnrB0w/lhkP2XTiMQdqSj
+8jAdBgNVHQ4EFgQU5mWf1DYLTXUdQ9xmOH/uqeNSD80wDgYDVR0PAQH/BAQDAgEG
+MAoGCCqGSM49BAMCA2kAMGYCMQC3M360LLtJS60Z9q3vVjJxMgMcFQ1roGTUcKqv
+W+4hJ4CeJjySXTgq6IEHn/yWab4CMQCm5NnK6SOSK+AqWum9lL87W3E6AA1f2TvJ
+/hgok/34jr93nhS87tOQNdxDS8zyiqw=
+-----END CERTIFICATE-----
+```
 
+или
 
+```
+-----BEGIN CERTIFICATE-----
+MIIDYTCCAwegAwIBAgIGAZY9utjzMAoGCCqGSM49BAMCMFMxJzAlBgNVBAMMHkJh
+c2ljIEF0dGVzdGF0aW9uIFVzZXIgU3ViIE5BMTETMBEGA1UECgwKQXBwbGUgSW5j
+LjETMBEGA1UECAwKQ2FsaWZvcm5pYTAeFw0yNTA0MTUwODMyNTdaFw0yNjA0MTAx
+NTAwNTdaMIGRMUkwRwYDVQQDDEA1ODk5YWNjNTY4YWI2YjJiOThjYzdmMmRjMTYy
+YWJlNTkzZjJlMDM0YjJlNDAyMjA2Y2MzOWMwMmFkNTQzNzcxMRowGAYDVQQLDBFC
+QUEgQ2VydGlmaWNhdGlvbjETMBEGA1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwK
+Q2FsaWZvcm5pYTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABEfuSX2/VaqQkTcU
+M3wLH7/5zIkiO/oJIsW08lKB5jGhL+v+pcqsYqt9yQsbxPS3axgjbqoCOcP/V3zY
+Fy8kDm82jggGGMIIBgjAMBggqhkjOPQQDAgUAA0gAMEUCIHLplLqirOgMmrPkMSQa
+DOpl/MAyEYejw/otUrfGGITiAiEAuLs1MYHGWuUdhyofXfY0S45GsSYXA/g8ombH
+MkcU54A=
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIICIzCCAaigAwIBAgIIeNjhG9tnDGgwCgYIKoZIzj0EAwIwUzEnMCUGA1UEAwwe
+QmFzaWMgQXR0ZXN0YXRpb24gVXNlciBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJ
+bmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMB4XDTE3MDQyMDA0MjAwMFoXDTMyMDMy
+MDAwMDAwMFowUzEnMCUGA1UEAwweQmFzaWMgQXR0ZXN0YXRpb24gVXNlciBSb290
+IENBMTETMBEGA1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTBZ
+MBMGByqGSM49AgEGCCqGSM49AwEHA0gAMEUCIHLplLqirOgMmrPkMSQaDOpl/MAy
+EYejw/otUrfGGITiAiEAuLs1MYHGWuUdhyofXfY0S45GsSYXA/g8ombHMkcU54A=
+-----END CERTIFICATE-----
+```
 
-
-
-
+пропускаем все эти моменты и идем в _encryptData - создание токена
 
 
 создадим токен
 ```objc
-- (NSData *)_encryptData:(NSData *)data //серт
+- (NSData *)_encryptData:(NSData *)data //серты
         serverSyncedDate:(NSDate *)serverDate 
                     error:(NSError **)error {
     // Log start of encryption
@@ -719,4 +780,13 @@ void __cdecl -[DCCertificateGenerator generateEncryptedCertificateChainWithCompl
     return encryptedData;
 }
 ```
+
+# Глава 4. Итог
+
+В этом репозитории я попытался показать полный путь генерации `DeviceCheck`-токена: от вызова `DCDevice` в приложении, через XPC и демон devicecheckd, до финального шифрования пейлоада в `_encryptData`. Разобраны ключевые этапы — инициализация контекста с TeamID.BundleID, получение публичного ключа (включая fallback-константу), сборка цепочки сертификатов и формирование зашифрованного blob, отправляемого на сервер.
+
+Надеюсь этот доклад сделал чуточку понятнее, почему девайсчек такая фиготень. В теори это можно обойти(как минимум юзать свои полученные серты), но мне лень это делать. 
+
+
+Работу выполнил [andrd3v](https://github.com/andrd3v). Помощь предоставил [whoeevee](https://github.com/whoeevee). Спасибо, что прочли!
 
