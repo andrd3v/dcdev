@@ -444,6 +444,17 @@ void __cdecl __noreturn -[DCAssetFetcher _queryMetadataWithContext:completion:](
 }
 ```
 
+graph TD
+    A[fetchPublicKeyAssetWithCompletion] --> B[Create DCAssetFetcherContext]
+    B --> C[Set allowCatalogRefresh:NO]
+    C --> D[_fetchAssetWithContext:completionHandler:]
+    D --> E[_queryMetadataWithContext:completion:]
+    E --> F{ignoreCachedMetadata?}
+    F -->|Yes| G[_handleMissingMetadataWithContext]
+    F -->|No| H[_handleSuccessForQuery]
+    H --> I[Validate asset]
+    I --> J[Return publicKey]
+
 
 и самое смешное - это все не нужно и это неверный путь, правильный ключ лежит в ```__37__DCCryptoProxyImpl__fetchPublicKey___block_invoke```
 ```objc
