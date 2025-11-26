@@ -1,5 +1,3 @@
-My English is not the best, so if something is not clear, then refer to the Russian documentation and translate it
-
 ### Work done by [andrd3v](https://github.com/andrd3v). Help provided by [whoeevee](https://github.com/whoeevee). Thanks for reading!
 reworking my old private report on dcdevice
 
