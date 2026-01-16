@@ -1,10 +1,12 @@
-### Work done by [andrd3v](https://github.com/andrd3v). Help provided by [whoeevee](https://github.com/whoeevee). Thanks for reading!
-reworking my old private report on dcdevice
+# Reverse Engineering Apple's DeviceCheck Token Generation
 
-# Chapter 1
-### DeviceCheck.framework
+This document presents an end-to-end reverse engineering of Apple's DeviceCheck token generation flow on iOS and macOS, starting from the public `DCDevice` API and following execution through `devicecheckd`, `DeviceCheckInternal.framework`, and the underlying cryptographic primitives.
 
-When creating a token from DCDevice, the method `-[DCDevice generateTokenWithCompletionHandler:]` is used – inside it calls `DCDeviceMetadataDaemonConnection`. This method creates a connection to the iPhone’s devicecheckd daemon:
+The goal is to provide a reproducible, engineering-grade description useful for security engineering, red teaming, and low-level reverse engineering work.
+
+## Chapter 1 – DeviceCheck.framework entry point
+
+When creating a token from `DCDevice`, the method `-[DCDevice generateTokenWithCompletionHandler:]` is used – inside it calls `DCDeviceMetadataDaemonConnection`. This method creates a connection to the iPhone’s `devicecheckd` daemon:
 ```objc
 NSXPCConnection *xpc_connection = (NSXPCConnection *)objc_msgSend(
                               objc_alloc((Class)&OBJC_CLASS___NSXPCConnection),
@@ -47,9 +49,10 @@ if ( app_id )
   objc_msgSend(init_DCDDeviceMetadata, "generateEncryptedBlobWithCompletion:", v4);
 }
 ```
-In summary: the devicecheckd daemon returns an encrypted token (opaque blob) to DeviceCheck.framework via XPC in the completionHandler block passed through `-[DCDDeviceMetadata generateEncryptedBlobWithCompletion:]`. This blob is later used as the token parameter in `-[DCDDeviceMetadata generateTokenWithCompletionHandler:]`.
-Breaking Down DCContext, DCDDeviceMetadata, and DCCryptoProxyImpl in fetchOpaqueBlobWithCompletion
-`DeviceCheckInternal.framework`
+In summary, the `devicecheckd` daemon returns an encrypted token (opaque blob) to `DeviceCheck.framework` via XPC in the completion handler passed to `-[DCDDeviceMetadata generateEncryptedBlobWithCompletion:]`. This blob is later exposed to callers as the token returned by `-[DCDevice generateTokenWithCompletionHandler:]`.
+
+### DCContext, DCDDeviceMetadata, and DCCryptoProxyImpl
+The behavior described below is implemented in `DeviceCheckInternal.framework`.
 
 The first thing that happens in `-[DCClientHandler fetchOpaqueBlobWithCompletion]` is the initialization of DCContext and assignment of our <TeamID>.<BundleIdentifier> or <BundleIdentifier> to it:
 ```objc
@@ -120,7 +123,7 @@ void __cdecl -[DCDDeviceMetadata generateEncryptedBlobWithCompletion:](DCDDevice
 }
 ```
 
-Excellent, the method `-[DCCryptoProxy fetchOpaqueBlobWithContext:completion:]` is now called, to which our context (with <TeamID>.<BundleIdentifier> or <BundleIdentifier>) and the completion handler are passed. IDA decompiles the code poorly, so it will be slightly rewritten for clarity:
+At this point, the method `-[DCCryptoProxy fetchOpaqueBlobWithContext:completion:]` is called with our context (containing <TeamID>.<BundleIdentifier> or <BundleIdentifier>) and the completion handler. IDA decompiles the code poorly, so the snippet below is a cleaned-up equivalent for readability:
 ```objc
 void __cdecl -[DCCryptoProxyImpl fetchOpaqueBlobWithContext:completion:](
         DCCryptoProxyImpl *self,
@@ -208,7 +211,7 @@ void __cdecl -[DCAssetFetcher fetchPublicKeyAssetWithCompletion:](DCAssetFetcher
 }
 ```
 
-For now I won't comment further; we continue down the chain:
+We now continue following the call chain:
 ```objc
 void __cdecl -[DCAssetFetcher _fetchAssetWithContext:completionHandler:](
         DCAssetFetcher *self,
@@ -230,7 +233,7 @@ void __cdecl -[DCAssetFetcher _fetchAssetWithContext:completionHandler:](
     [retainedContext release];
 }
 ```
-Now things get interesting – `_queryMetadataWithContext:`
+The most interesting part here is `_queryMetadataWithContext:`:
 
 ```objc
 void __cdecl __noreturn -[DCAssetFetcher _queryMetadataWithContext:completion:](
@@ -400,7 +403,7 @@ void __cdecl __noreturn -[DCAssetFetcher _queryMetadataWithContext:completion:](
 }
 ```
 
-And the funniest part – none of this was needed and it’s the wrong path: the correct key is in `__37__DCCryptoProxyImpl__fetchPublicKey___block_invoke`:
+Interestingly, none of this metadata fetching is required for the key material itself: the effective public key is embedded in `__37__DCCryptoProxyImpl__fetchPublicKey___block_invoke`:
 ```+[NSData dataWithBytes:length:](&OBJC_CLASS___NSData, "dataWithBytes:length:", &fallback_server_pubkey, 65LL);```
 It is hard-coded and the same in all versions of macOS, iOS, and iPadOS:
 `0450d934fa67bcf6f2dfbf96629e0a7238e9205d75f28cfcd84f35a6592bbe058a9c0f8edbca2acb67efb774971ca45f7d856a694fb1b9c40b94fb2e7a5a9498b0`
@@ -412,7 +415,7 @@ P�4�g���߿�b�
 r8� ]u���O5�Y+������*�g�t��_}�jiO���
                                     ��.zZ���%
 ```
-and that’s our public key.
+This value is the public key used by DeviceCheck.
 # Chapter 3
 `DeviceCheckInternal.framework`
 Important note: almost all methods are rewritten by me to make them easier to read and understand. Returning to `fetchOpaqueBlobWithContext:`
@@ -499,7 +502,7 @@ void __cdecl -[DCCertificateGenerator generateEncryptedCertificateChainWithCompl
   objc_release(v3);
 }
 ```
-First – we need to get the certificate via _generateCertificateChainWithCompletion, and then pass it to __74__DCCertificateGenerator_generateEncryptedCertificateChainWithCompletion___block_invoke – where it will be passed to _encryptData, the place where the token is created. In short, all this is about obtaining two root certificates from the keychain – in theory this can be reversed or the logic replicated (which I very much doubt, since it involves the keychain), but obtaining the certificate happens in __DeviceIdentityIssueClientCertificateWithCompletion_block_invoke. Here are example certificates from the argument:
+Conceptually, `_generateCertificateChainWithCompletion` retrieves a small certificate chain from the keychain and passes it into `__74__DCCertificateGenerator_generateEncryptedCertificateChainWithCompletion___block_invoke`, which then hands it to `_encryptData`, where the final token is constructed. For our purposes, the important point is that two root certificates are fetched from the keychain in `__DeviceIdentityIssueClientCertificateWithCompletion_block_invoke`; representative examples are shown below:
 ```
 -----BEGIN CERTIFICATE-----
 MIIDPjCCAuWgAwIBAgIGAZhghIx7MAoGCCqGSM49BAMCMFMxJzAlBgNVBAMMHkJh
@@ -566,7 +569,7 @@ MBMGByqGSM49AgEGCCqGSM49AwEHA0gAMEUCIHLplLqirOgMmrPkMSQaDOpl/MAy
 EYejw/otUrfGGITiAiEAuLs1MYHGWuUdhyofXfY0S45GsSYXA/g8ombHMkcU54A=
 -----END CERTIFICATE-----
 ```
-We skip all of these details and go to _encryptData – the creation of the token. Let’s create the token:
+Rather than focusing on the X.509 details, the core of the token logic lives in `_encryptData`, which builds and encrypts the final payload. The following reconstructed implementation illustrates that function:
 ```objc
 - (NSData *)_encryptData:(NSData *)data // certificates
         serverSyncedDate:(NSDate *)serverDate 
@@ -716,8 +719,10 @@ We skip all of these details and go to _encryptData – the creation of the toke
     return encryptedData;
 }
 ```
-# Chapter 4. Conclusion
+# Chapter 4. Conclusion and security implications
 
-In this repository I attempted to show the full path of generating a DeviceCheck token: from calling DCDevice in the app, through XPC and the devicecheckd daemon, to the final encryption of the payload in _encryptData. Key stages are covered – initializing the context with TeamID.BundleID, obtaining the public key (including the fallback constant), assembling the certificate chain, and forming the encrypted blob sent to the server. I hope this report made it a bit clearer why DeviceCheck is such a pain. In theory it can be bypassed (at least by using your own obtained certificates), but I'm too lazy to do that.
+This write-up traces the full DeviceCheck token generation path: from calling `DCDevice` in an app, through XPC into the `devicecheckd` daemon, into `DeviceCheckInternal.framework`, and finally to `_encryptData`, where the payload is constructed and encrypted. Key stages are covered – initializing the context with `TeamID.BundleID`, resolving the public key (including the hard-coded fallback), assembling the certificate chain, and forming the opaque blob returned to the caller.
 
-### Work done by [andrd3v](https://github.com/andrd3v). Help provided by [whoeevee](https://github.com/whoeevee). Thanks for reading!
+From a security and red-team perspective, this analysis provides the primitives needed to reason about DeviceCheck’s trust model, to emulate or instrument the client in controlled environments, and to assess how robustly backends validate and interpret DeviceCheck tokens.
+
+Work by [andrd3v](https://github.com/andrd3v). Thanks for the help, [whoeevee](https://github.com/whoeevee).
