@@ -1,6 +1,6 @@
 # Reverse Engineering Apple's DeviceCheck Token Generation
 
-This document presents an end-to-end reverse engineering of Apple's DeviceCheck token generation flow on iOS and macOS, starting from the public `DCDevice` API and following execution through `devicecheckd`, `DeviceCheckInternal.framework`, and the underlying cryptographic primitives.
+This document presents an end-to-end reverse engineering of Apple's DeviceCheck token generation flow on iOS, starting from the public `DCDevice` API and following execution through `devicecheckd`, `DeviceCheckInternal.framework`, and the underlying cryptographic primitives.
 
 The goal is to provide a reproducible, engineering-grade description useful for security engineering, red teaming, and low-level reverse engineering work.
 
